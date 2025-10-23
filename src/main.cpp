@@ -85,7 +85,7 @@ void loop()
 
 
 #ifdef PIO_CI 
-const char *ssid = SSID;
+const char *ssid = WIFI_SSID;
 const char *wifiPassword = WIFI_PASS;
 const char *mqtt_server = MQTT_SERVER;
 const char *mqttTopic = MQTT_TOPIC;
