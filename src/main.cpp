@@ -80,10 +80,6 @@ void loop()
     delay(10000000);
 }
 
-
-
-
-
 #ifdef PIO_CI 
 const char *ssid = WIFI_SSID;
 const char *wifiPassword = WIFI_PASS;

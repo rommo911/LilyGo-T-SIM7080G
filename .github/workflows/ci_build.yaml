@@ -47,7 +47,7 @@ jobs:
         with:
           name: firmware_${{ steps.timestamp.outputs.timestamp }}
           path: artifacts/firmware_${{ steps.timestamp.outputs.timestamp }}.bin
-          retention-days: 90
+          retention-days: 30
 
       - name: Create Release
         if: startsWith(github.ref, 'refs/tags/')
