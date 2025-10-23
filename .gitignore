@@ -2,5 +2,4 @@
 .vscode
 build
 __pycache__
-
-
+src/wifi_secret.cpp
