@@ -22,7 +22,7 @@ jobs:
 
       - name: Build PlatformIO Project
         env:
-          PLATFORMIO_BUILD_FLAGS: -D PIO_CI
+          PLATFORMIO_BUILD_FLAGS: -D PIO_CI -D WIFI_PASS=\"${{ secrets.WIFI_PASS }}\"  SSID=\"${{ secrets.SSID }}\"
         run: pio run -e usb
 
       - name: Get current timestamp

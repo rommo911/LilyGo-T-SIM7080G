@@ -85,12 +85,12 @@ void loop()
 
 
 #ifdef PIO_CI 
-const char *ssid = "test";
-const char *wifiPassword = "test";
-const char *mqtt_server = "192.test";
-const char *mqttTopic = "test";
-const char *cmdTopic = "test/cmd";
-const char *mqttUser = "test";
-const char *mqttPass = "test";
-uint32_t mqtt_port = 665;
+const char *ssid = SSID;
+const char *wifiPassword = WIFI_PASS;
+const char *mqtt_server = MQTT_SERVER;
+const char *mqttTopic = MQTT_TOPIC;
+const char *cmdTopic = CMD_TOPIC;
+const char *mqttUser = MQTT_USER;
+const char *mqttPass = MQTT_PASS;
+uint32_t mqtt_port = MQTT_PORT;
 #endif 
