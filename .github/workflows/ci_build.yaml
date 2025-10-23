@@ -21,6 +21,8 @@ jobs:
         run: pip install --upgrade platformio
 
       - name: Build PlatformIO Project
+        env:
+          PLATFORMIO_BUILD_FLAGS: -D PIO_CI
         run: pio run -e usb
 
       - name: Get current timestamp

@@ -19,7 +19,6 @@
 
 
 
-
 void setup()
 {
     bool ret = false;
@@ -78,6 +77,20 @@ void setup()
 
 void loop()
 {
-
-    delay(1000);
+    delay(10000000);
 }
+
+
+
+
+
+#ifdef PIO_CI 
+const char *ssid = "test";
+const char *wifiPassword = "test";
+const char *mqtt_server = "192.test";
+const char *mqttTopic = "test";
+const char *cmdTopic = "test/cmd";
+const char *mqttUser = "test";
+const char *mqttPass = "test";
+uint32_t mqtt_port = 665;
+#endif 
