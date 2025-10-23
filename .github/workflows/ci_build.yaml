@@ -30,7 +30,7 @@ jobs:
                                   -D CMD_TOPIC=\"${{ secrets.CMD_TOPIC }}\"
                                   -D MQTT_USER=\"${{ secrets.MQTT_USER }}\"
                                   -D MQTT_PASS=\"${{ secrets.MQTT_PASS }}\"
-                                  -D MQTT_PORT=${{ secrets.MQTT_PORT }}
+                                  -D MQTT_PORT=${{ secrets.MQTT_PORT }} 
         run: pio run -e usb
 
       - name: Get current timestamp
