@@ -6,10 +6,11 @@
 #include <WiFiClient.h>
 #include <WebServer.h>
 #include <ESPmDNS.h>
-#include <Update.h>
+#include <esp-fs-webserver.h> // https://github.com/cotestatnt/esp-fs-webserver
 
 namespace fs
 {
+    extern FSWebServer myWebServer;
     static const String style =
         "<style>#file-input,input{width:100%;height:44px;border-radius:4px;margin:10px auto;font-size:15px}"
         "input{background:#f1f1f1;border:0;padding:0 15px}body{background:#3498db;font-family:sans-serif;font-size:14px;color:#777}"

@@ -1,14 +1,15 @@
 #include "wifi/wifi.hpp"
 #include "ArduinoOTA.h"
 #include "web_server/web.hpp"
-
+#include "time.h"
+#include "rtc/rtc.hpp"
 extern const char *ssid;
 extern const char *wifiPassword;
 extern const char *mqtt_server;
 extern const char *mqttUser;
 extern const char *mqttPass;
 extern const char *cmdTopic;
-extern const char *mqttTopic ;
+extern const char *mqttTopic;
 
 extern uint32_t mqtt_port;
 uint32_t last_ota_time = 0;
@@ -19,24 +20,26 @@ PubSubClient mqttclient(espClient);
 
 MqttLogger mqttLogger(mqttclient, mqttTopic, MqttLoggerMode::MqttAndSerial);
 
-
 void MqttReceiveCallback(char *topic, byte *payload, unsigned int length)
 {
   // Safely convert payload (which may not be null-terminated) into a String.
   const unsigned int MAX_PAYLOAD = 1024; // prevent excessive allocation
   unsigned int len = length;
-  if (len > MAX_PAYLOAD) {
+  if (len > MAX_PAYLOAD)
+  {
     len = MAX_PAYLOAD;
     mqttLogger.println("Warning: payload truncated due to size");
   }
 
   char *buf = (char *)malloc(len + 1);
-  if (buf == NULL) {
+  if (buf == NULL)
+  {
     mqttLogger.println("Error: malloc failed in MqttReceiveCallback");
     return;
   }
 
-  if (len > 0) {
+  if (len > 0)
+  {
     memcpy(buf, payload, len);
   }
   buf[len] = '\0'; // ensure null termination
@@ -46,6 +49,50 @@ void MqttReceiveCallback(char *topic, byte *payload, unsigned int length)
 
   Serial.printf("got message on topic %s = %s \n", topic, mqttReceStr.c_str());
   // handle message arrived
+}
+
+bool syncntpTime()
+{
+  // Configure Paris timezone and NTP
+  const char *ntpServer = "fr.pool.ntp.org"; // French NTP pool for better accuracy
+  const long gmtOffset_sec = 3600;           // Paris is UTC+1 (3600 seconds)
+  const int daylightOffset_sec = 3600;       // +1 hour for summer time
+
+  // Set timezone before configTime
+  setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1); // Set timezone rule for Paris
+  tzset();
+
+  // Init and get the time with retry
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer, "pool.ntp.org", "time.nist.gov");
+
+  // Wait for time to be set
+  time_t now = time(nullptr);
+  int retry = 0;
+  while (now < 24 * 3600 && retry < 50)
+  {
+    Serial.println("Waiting for NTP time sync...");
+    delay(50);
+    now = time(nullptr);
+    retry++;
+  }
+
+  if (now > 24 * 3600)
+  {
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo))
+    {
+      char strftime_buf[64];
+      strftime(strftime_buf, sizeof(strftime_buf), "%A, %B %d %Y %H:%M:%S %Z", &timeinfo);
+      Serial.printf("NTP Synchronized. Current Paris time: %s\n", strftime_buf);
+      // rtc::setRtcTimeDateFromSystemTime();
+      return true;
+    }
+    else
+    {
+      Serial.println("Failed to obtain time");
+    }
+  }
+  return false;
 }
 
 void setUpWifiOTA(void *arg)
@@ -108,6 +155,7 @@ void setUpWifiOTA(void *arg)
   mqttclient.setCallback(MqttReceiveCallback);
   mqttclient.setServer(mqtt_server, mqtt_port);
   fs::fs_server_setup();
+  syncntpTime();
   while (1)
   {
     while (!mqttclient.connected())
@@ -129,9 +177,9 @@ void setUpWifiOTA(void *arg)
     }
     mqttclient.loop();
     ArduinoOTA.handle();
+    fs::myWebServer.run();
   }
 }
-
 
 void setUpWifiAP()
 {

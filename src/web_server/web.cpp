@@ -5,7 +5,7 @@
 #include <Preferences.h>   // For NVS storage
 #include "ArduinoJson.h"   // For JSON parsing
 #include "LittleFS.h"
-#include <esp-fs-webserver.h> // https://github.com/cotestatnt/esp-fs-webserver
+#include <Update.h>
 
 namespace fs
 {
@@ -29,15 +29,6 @@ namespace fs
            message + "</h1>"
                      "<button onclick=\"window.location.href='/serverIndex'\">Return to Main Page</button>"
                      "</body></html>";
-  }
-
-  void fs_server_loop(void *arg)
-  {
-    while (1)
-    {
-      myWebServer.run();
-      delay(10); // allow the cpu to switch to other tasks
-    }
   }
 
   void fs_server_setup(void)
@@ -90,46 +81,59 @@ namespace fs
               myWebServer.send(200, "text/html", timeDatePage); });
 
     /* Set Time */
-    myWebServer.on("/setTime", HTTP_POST, [&]()
-                   {
-                  if(!myWebServer.authenticate_internal())
-                  {
-                      Serial.println("Authentication failed, redirecting to login page.");
-                    return myWebServer.requestAuthentication();
-                  }
-              if (myWebServer.hasArg("plain"))
-              {
-                String body = myWebServer.arg("plain");
-                JsonDocument doc;
-                deserializeJson(doc, body);
-                String datetime = doc["datetime"];
-                // Parse and set system time here
-                Serial.printf("Setting time to: %s\n", datetime.c_str());
-                myWebServer.send(200, "text/html", generateSuccessPage("Time set successfully!"));
-                //set system time using datetime string without seconds 
-                // Example datetime string: "2023-10-01T12:34"
-                struct tm timeinfo;
-                if (strptime(datetime.c_str(), "%Y-%m-%dT%H:%M", &timeinfo) != NULL)
-                {
-                  time_t t = mktime(&timeinfo);
-                  struct timeval tv = {t, 0};
-                  settimeofday(&tv, NULL);
-                  Serial.println("Time set successfully.");
-                  // print system time 
-                  char buffer[26];
-                  strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", localtime(&t));
-                  Serial.printf("Current time: %s\n", buffer);
-                  
+    myWebServer.on("/setTime", HTTP_POST, [&]() {
+        if(!myWebServer.authenticate_internal()) {
+            Serial.println("Authentication failed, redirecting to login page.");
+            return myWebServer.requestAuthentication();
+        }
+        if (myWebServer.hasArg("plain")) {
+            String body = myWebServer.arg("plain");
+            JsonDocument doc;
+            DeserializationError error = deserializeJson(doc, body);
+            
+            if (error) {
+                Serial.println("Failed to parse JSON");
+                myWebServer.send(400, "text/html", generateSuccessPage("Invalid JSON format"));
+                return;
+            }
+
+            String datetime = doc["datetime"];
+            // Default to Paris timezone if not provided
+            String timezone = doc["timezone"] | "CET-1CEST,M3.5.0,M10.5.0/3"; 
+            
+            // Set timezone
+            setenv("TZ", timezone.c_str(), 1);
+            tzset();
+
+            struct tm timeinfo = { 0 };
+            // Parse datetime string (expected format: "YYYY-MM-DDTHH:MM")
+            if (strptime(datetime.c_str(), "%Y-%m-%dT%H:%M", &timeinfo) != NULL) {
+                timeinfo.tm_sec = 0; // Set seconds to 0
+                
+                // Convert to time_t and set system time
+                time_t t = mktime(&timeinfo);
+                struct timeval tv = { .tv_sec = t, .tv_usec = 0 };
+                
+                if (settimeofday(&tv, NULL) == 0) {
+                    // Verify the time was set correctly with Paris timezone
+                    time_t now = time(nullptr);
+                    char buffer[26];
+                    strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S %Z", localtime(&now));
+                    Serial.printf("Time set successfully to time: %s\n", buffer);
+                    
+                    myWebServer.send(200, "text/html", generateSuccessPage("Time set successfully to: " + String(buffer)));
+                } else {
+                    Serial.println("Failed to set system time");
+                    myWebServer.send(500, "text/html", generateSuccessPage("Failed to set system time"));
                 }
-                else
-                {
-                  Serial.println("Failed to parse datetime string.");
-                }
-              }
-              else
-              {
-                myWebServer.send(400, "text/html", generateSuccessPage("Failed to set time."));
-              } });
+            } else {
+                Serial.println("Failed to parse datetime string");
+                myWebServer.send(400, "text/html", generateSuccessPage("Invalid datetime format"));
+            }
+        } else {
+            myWebServer.send(400, "text/html", generateSuccessPage("No data received"));
+        }
+    });
 
     /* BLE iBeacon UUID Page */
     myWebServer.on("/bleUUID", HTTP_GET, [&]()
@@ -248,7 +252,9 @@ namespace fs
               String currentTime = String(buffer);
               String jsonResponse = "{\"currentTime\": \"" + currentTime + "\"}";
               myWebServer.send(200, "application/json", jsonResponse); });
-    myWebServer.on("/getCurrentUUID", HTTP_GET, [&]()
+
+
+              myWebServer.on("/getCurrentUUID", HTTP_GET, [&]()
                    {
                   if(!myWebServer.authenticate_internal())
                   {
@@ -265,8 +271,6 @@ namespace fs
                            { myWebServer.send(404, "text/plain", "404: Not Found"); });
 
     myWebServer.begin();
-
-    xTaskCreate(fs_server_loop, "fs_server_loop", 8192, NULL, 1, NULL);
   }
 
   /* Helper function to check if the session is still valid */
