@@ -4,4 +4,5 @@ otadata,  data, ota,     ,  0x2000,
 factory,  app,  factory, ,  3M,
 app0,     app,  ota_0,   , 4M,
 app1,     app,  ota_1,   ,4M,
-littlefs,   data, littlefs,  ,4M,
+spiffs, data, spiffs,  ,2M,
+coredump, data,coredump,,0x10000 

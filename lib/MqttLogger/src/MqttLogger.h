@@ -15,47 +15,34 @@
 
 enum MqttLoggerMode
 {
-    MqttAndSerialFallback = 0,
-    SerialOnly = 1,
-    MqttOnly = 2,
-    MqttAndSerial = 3,
+    SerialOnly = 0,
+    MqttOnly = 1,
+    MqttAndSerial = 2,
 };
 
-class MqttLogger : public Print
+class MqttLogger 
 {
 private:
-    const char *topic;
-    String merticTopic;
-    String logTopic;
-    uint8_t *buffer;
-    uint8_t *bufferEnd;
-    uint16_t bufferCnt = 0, bufferSize = 0;
-    PubSubClient *client;
-    MqttLoggerMode mode;
-    void sendBuffer();
-    bool retained;
+    const char *topic = nullptr;
+    PubSubClient *client = nullptr;
+    MqttLoggerMode mode = MqttLoggerMode::MqttAndSerial;
+    bool retained = false;
 
 public:
-    MqttLogger(MqttLoggerMode mode = MqttLoggerMode::MqttAndSerialFallback);
-    MqttLogger(PubSubClient &client, const char *topic, MqttLoggerMode mode = MqttLoggerMode::MqttAndSerialFallback, const boolean &retained = true);
+    explicit MqttLogger(PubSubClient &client, const char *topic, MqttLoggerMode mode = MqttLoggerMode::MqttAndSerial, const boolean &retained = true);
     ~MqttLogger();
 
     void setClient(PubSubClient &client);
     void setTopic(const char *topic);
-    void setMetricTopic(const char *topic);
     void setMode(MqttLoggerMode mode);
     void setRetained(const boolean &retained);
-    virtual size_t write(uint8_t);
-    using Print::write;
     
     // formatted print helpers (default behavior: write into MqttLogger's buffer)
-    size_t printfTopic(const char *topic, const char *format, ...); // printf that sets topic for that message
+    size_t printf(const char *_topic, const char *format, ...); // printf that sets topic for that message
+    size_t printf(const char *format, ...); // printf that sets topic for that message
     // simple topic-aware print/println
-    size_t printlnTopic(const char *topic, const char *s);
-
-
-    uint16_t getBufferSize();
-    boolean setBufferSize(uint16_t size);
+    size_t println(const char *_topic, const char *s);
+    size_t println(const char *s);
 };
 
 #endif

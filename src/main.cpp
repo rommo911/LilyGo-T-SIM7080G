@@ -8,16 +8,15 @@
  *
  */
 #include <Arduino.h>
-#include "sdcard.h"
-#include "wifi.hpp"
-#include "power.hpp"
+#include "sdcard/sdcard.h"
+#include "wifi/wifi.hpp"
+#include "power/power.hpp"
 #include "pins.hpp"
 #include "main.hpp"
-#include "fast_led.hpp"
-#include "imu_DMP6.hpp"
-#include "mqttLogger.hpp"
-
-
+#include "fast_led/fast_led.hpp"
+#include "imu/imu_DMP6.hpp"
+#include "wifi/wifi.hpp"
+#include "modem/modem.hpp"
 
 void setup()
 {
@@ -30,9 +29,10 @@ void setup()
     {
         delay(1000);
     };
-    xTaskCreate(setUpWifiOTA, "ota", 4096, NULL, 1, NULL);
-
-    delay(2500);
+    delay(1000);
+    xTaskCreate(setUpWifiOTA, "ota", 4096, NULL, 5, NULL);
+    // setUpWifiAP();
+    delay(4500);
 
     Serial.println();
 
@@ -40,18 +40,11 @@ void setup()
 
     power::getWakeupReason();
 
-    if (!psramFound())
-    {
-        Serial.println("ERROR: PSRAM not found!");
-    }
-
-    Serial.println("=========================================");
-
     power::setupPower();
 
     Serial.println("=========================================");
 
-    setupSdcard();
+    // sdcard::setupSdcard();
 
     Serial.println("=========================================");
 
@@ -73,6 +66,12 @@ void setup()
         // }
         // ESP.restart();
     }
+    bool modRet = modem::initModem7080();
+    if (modRet)
+    {
+        modem::setRF(false);
+        modem::SetGPS(true);
+    }
 }
 
 void loop()
@@ -80,7 +79,7 @@ void loop()
     delay(10000000);
 }
 
-#ifdef PIO_CI 
+#ifdef PIO_CI
 const char *ssid = WIFI_SSID;
 const char *wifiPassword = WIFI_PASS;
 const char *mqtt_server = MQTT_SERVER;
@@ -89,4 +88,4 @@ const char *cmdTopic = CMD_TOPIC;
 const char *mqttUser = MQTT_USER;
 const char *mqttPass = MQTT_PASS;
 uint32_t mqtt_port = MQTT_PORT;
-#endif 
+#endif

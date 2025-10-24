@@ -29,7 +29,7 @@
 #endif
 
 #ifndef TINY_GSM_YIELD_MS
-#define TINY_GSM_YIELD_MS 0
+#define TINY_GSM_YIELD_MS 5
 #endif
 
 #ifndef TINY_GSM_YIELD
