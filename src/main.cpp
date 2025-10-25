@@ -102,18 +102,17 @@ void loopPowerCheck()
     // Serial.println("Checking power status...loop");
     carEverStarted |= power::isPowerVBUSOn();
 
-    if (power::isBatCriticalLevel() || simulatedLowPowerTrigger)
+    if (power::isBatCriticalLevel() || simulatedCriticalLowPowerTrigger )
     {
-        simulatedLowPowerTrigger = false;
+        simulatedCriticalLowPowerTrigger = false;
         mqttLogger.println("Battery critical level detected in main loop");
         imu_dmp::shutdown();
         power::DeepSleepWith_PMU_Wake();
     }
-    if (power::isBatLowLevel() || simulatedCriticalLowPowerTrigger)
+    if (power::isBatLowLevel() || simulatedLowPowerTrigger)
     {
-        simulatedCriticalLowPowerTrigger = false;
+        simulatedLowPowerTrigger = false;
         mqttLogger.println("Battery low level detected in main loop");
-        imu_dmp::setupLowPowerMode();
         power::DeepSleepWith_IMU_PMU_Wake();
     }
 }
@@ -184,9 +183,9 @@ void loopWifiStatus()
         mqttLogger.println("Power key short pressed detected in main loop");
         if (!GetWifiOn())
         {
-            LastWifiOnTimestamp = millis();
             StartWifi();
         }
+        LastWifiOnTimestamp = millis();
     }
     if (GetWifiOn() && (millis() - LastWifiOnTimestamp > 1000 * 60 * 5))
     {

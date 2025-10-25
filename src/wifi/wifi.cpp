@@ -244,6 +244,8 @@ bool setupWifiSTA()
   mqttclient.setCallback(MqttReceiveCallback);
   mqttclient.setServer(mqtt_server, mqtt_port);
   mqttclient.connect("ESP32Tsim7080", mqttUser, mqttPass);
+  delay(500);
+  mqttclient.subscribe(cmdTopic, 1);
   Serial.print("WiFi connected IP address: ");
   Serial.println(WiFi.localIP());
   ArduinoOTA.begin();
