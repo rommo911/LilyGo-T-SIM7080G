@@ -31,7 +31,7 @@ private:
     bool retained = false;
 
 public:
-    explicit MqttLogger(PubSubClient &client, const char *topic, MqttLoggerMode mode = MqttLoggerMode::MqttAndSerial, const boolean &retained = true);
+    explicit MqttLogger(PubSubClient &client, const char *topic, MqttLoggerMode mode = MqttLoggerMode::MqttAndSerial, const bool retained = false);
     ~MqttLogger();
 
     void setClient(PubSubClient &client);

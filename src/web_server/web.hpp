@@ -15,7 +15,7 @@ namespace fs
         LittleFS,
         SDcard
     };
-    extern FSWebServer* myWebServer;
+    FSWebServer &GetmyWebServer();
     bool fs_server_setup(FServerSource source = FServerSource::LittleFS);
 
     static const String style =
@@ -58,7 +58,7 @@ namespace fs
         style;
 
     /* Server Index Page */
-    static const String serverIndex =
+    static const String CarserverIndex =
         "<script src='https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js'></script>"
         "<br><br>"
         "<div id='prg'></div>"

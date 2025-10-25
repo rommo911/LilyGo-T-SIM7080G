@@ -30,6 +30,7 @@
 #include "MPU6050_6Axis_MotionApps20.h"
 #include "imu_DMP6.hpp"
 #include "pins.hpp"
+#include "wifi/wifi.hpp"
 namespace imu_dmp
 {
 
@@ -82,7 +83,7 @@ namespace imu_dmp
   float MOTION_THRESHOLD_GY = 0.0028f; // sensitivity: ~0.03 g (~0.3 m/s^2)
   float MOTION_THRESHOLD_GZ = 0.0500f; // sensitivity: ~0.03 g (~0.3 m/s^2)
   const uint16_t BASELINE_SAMPLES = 150;
-
+  static bool imu_dmp_loop = false;
   SemaphoreHandle_t imuSemaphore;
   void imu_loop(void *arg);
 
@@ -96,16 +97,15 @@ namespace imu_dmp
 
   bool imu_setup()
   {
-    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN, 200000); // Start I2C bus
+    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN, 400000); // Start I2C bus
     vSemaphoreCreateBinary(imuSemaphore);         // 400kHz I2C clock. Comment on this line if having compilation difficulties
     xSemaphoreGive(imuSemaphore);
     uint8_t counter = 0;
     /*Initialize device*/
-    Serial.println(F("Initializing I2C devices..."));
     mpu.reset();
     delay(250);
     mpu.initialize();
-    delay(250);
+    delay(150);
 
     /*Verify connection*/
     Serial.println(F("Testing MPU6050 connection..."));
@@ -114,10 +114,11 @@ namespace imu_dmp
       mpu.reset();
       delay(250);
       mpu.initialize();
-      delay(250);
+      delay(150);
+      mpu.setWakeCycleEnabled(false); // Enable wake on motion detection
       if (mpu.testConnection() == false)
       {
-        Serial.println("MPU6050 connection failed");
+        mqttLogger.println("MPU6050 connection failed");
         return false;
       }
     }
@@ -127,7 +128,7 @@ namespace imu_dmp
     }
 
     /* Initializate and configure the DMP*/
-    Serial.println(F("Initializing DMP..."));
+    mqttLogger.println("Initializing DMP...");
     devStatus = mpu.dmpInitialize();
 
     /* Supply your gyro offsets here, scaled for min sensitivity */
@@ -137,6 +138,8 @@ namespace imu_dmp
     mpu.setXAccelOffset(0);
     mpu.setYAccelOffset(0);
     mpu.setZAccelOffset(0);
+    // set interrupt to active low
+    mpu.setInterruptMode(1);
 
     /* Making sure it worked (returns 0 if so) */
     if (devStatus == 0)
@@ -144,26 +147,26 @@ namespace imu_dmp
       mpu.CalibrateAccel(15); // Calibration Time: generate offsets and calibrate our MPU6050
       mpu.CalibrateGyro(15);
       Serial.println("These are the Active offsets: ");
-      Serial.println(F("Enabling DMP...")); // Turning ON DMP
+      mqttLogger.println("Enabling DMP..."); // Turning ON DMP
       mpu.setDMPEnabled(true);
       /*Enable Arduino interrupt detection*/
       Serial.print(F("Enabling interrupt detection (Arduino external interrupt "));
       Serial.print(digitalPinToInterrupt(MOTION_INTRRUPT_PIN));
       Serial.println(F(")..."));
       detachInterrupt(MOTION_INTRRUPT_PIN);
-      pinMode(MOTION_INTRRUPT_PIN, INPUT);
-      attachInterrupt(MOTION_INTRRUPT_PIN, DMPDataReady, RISING);
+      pinMode(MOTION_INTRRUPT_PIN, INPUT_PULLUP);
+      attachInterrupt(MOTION_INTRRUPT_PIN, DMPDataReady, FALLING);
 
       /* Set the DMP Ready flag so the main loop() function knows it is okay to use it */
-      Serial.println(F("DMP ready! Waiting for first interrupt..."));
+      mqttLogger.println("DMP ready! Waiting for first interrupt...");
       DMPReady = true;
       packetSize = mpu.dmpGetFIFOPacketSize(); // Get expected DMP packet size for later comparison
     }
     else
     {
-      Serial.print(F("DMP Initialization failed (code ")); // Print the error code
+      mqttLogger.println("DMP Initialization failed (code "); // Print the error code
       Serial.print(devStatus);
-      Serial.println(F(")"));
+      Serial.println();
       // 1 = initial memory load failed
       // 2 = DMP configuration updates failed
       return false;
@@ -232,7 +235,7 @@ namespace imu_dmp
 
   void imu_loop(void *arg)
   {
-    while (1)
+    while (imu_dmp_loop)
     {
       if (!DMPReady || !MPUInterrupt)
       {
@@ -317,12 +320,10 @@ namespace imu_dmp
     vTaskDelete(NULL);
   }
 
-  uint64_t ts = 0;
-  MotionDtect_t str = {};
   uint64_t getLastMovedTimestamp()
   {
     xSemaphoreTake(imuSemaphore, pdMS_TO_TICKS(10));
-    ts = lastMoved_timestamp;
+    uint64_t ts = lastMoved_timestamp;
     xSemaphoreGive(imuSemaphore);
     return ts;
   }
@@ -331,9 +332,43 @@ namespace imu_dmp
   MotionDtect_t imu_get_moved()
   { // Atomically consume the flag
     xSemaphoreTake(imuSemaphore, pdMS_TO_TICKS(10));
-    str = globalMotion;
+    MotionDtect_t str = globalMotion;
     globalMotion.reset();
     xSemaphoreGive(imuSemaphore);
     return str;
+  }
+
+  bool shutdown()
+  {
+    Serial.println("Setting up sleep mode...");
+    imu_dmp_loop = false;
+    MPUInterrupt = true;
+    baseline_ready = true;
+    vTaskDelay(pdMS_TO_TICKS(100));
+    xSemaphoreTake(imuSemaphore, pdMS_TO_TICKS(100));
+    mpu.reset();
+    mpu.setSleepEnabled(true);
+    xSemaphoreGive(imuSemaphore);
+    return true;
+  }
+
+  bool setupLowPowerMode()
+  {
+    Serial.println("Setting up IMU low power mode...");
+    imu_dmp_loop = false;
+    MPUInterrupt = true;
+    baseline_ready = true;
+    xSemaphoreTake(imuSemaphore, pdMS_TO_TICKS(100));
+    mpu.reset();
+    delay(250);
+    mpu.initialize();
+    delay(250);
+    mpu.setIntMotionEnabled(true);
+    mpu.setMotionDetectionCounterDecrement(1); // Count units for motion detection
+    mpu.setMotionDetectionThreshold(1);        // Motion threshold (LSB) for
+    mpu.setWakeCycleEnabled(true);             // Enable wake on motion detection
+    mpu.setWakeFrequency(40);
+    xSemaphoreGive(imuSemaphore);
+    return true;
   }
 }

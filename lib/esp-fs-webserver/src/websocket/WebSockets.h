@@ -30,7 +30,7 @@
 #include <functional>
 #include "../SerialLog.h"
 
-#define WEBSOCKETS_MAX_DATA_SIZE (15 * 1024)
+#define WEBSOCKETS_MAX_DATA_SIZE (15 * 2048)
 #define WEBSOCKETS_USE_BIG_MEM
 #define GET_FREE_HEAP ESP.getFreeHeap()
 
@@ -67,7 +67,7 @@
     #include <WiFiClientSecure.h>
     #define SSL_AXTLS
     #define WEBSOCKETS_YIELD() yield()
-    #define WEBSOCKETS_YIELD_MORE() delay(1)
+    #define WEBSOCKETS_YIELD_MORE() delay(5)
 
     #define WEBSOCKETS_NETWORK_CLASS WiFiClient
     #define WEBSOCKETS_NETWORK_SSL_CLASS WiFiClientSecure

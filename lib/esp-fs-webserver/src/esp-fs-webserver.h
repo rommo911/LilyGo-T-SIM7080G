@@ -5,7 +5,7 @@
 #include <FS.h>
 
 #define DBG_OUTPUT_PORT     Serial
-#define LOG_LEVEL           1         // (0 disable, 1 error, 2 info, 3 debug)
+#define LOG_LEVEL           2         // (0 disable, 1 error, 2 info, 3 debug)
 #include "SerialLog.h"
 
 //default values
@@ -156,7 +156,7 @@ public:
     /*
     * List all files in folder
     */
-	void printFileList(fs::FS& fs, Print& p, const char* dirName, uint8_t level = 1);
+	void printFileList(Print& p, const char* dirName, uint8_t level = 1);
 
     /*
     * Get library version

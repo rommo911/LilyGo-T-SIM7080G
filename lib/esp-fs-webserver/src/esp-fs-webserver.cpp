@@ -64,7 +64,10 @@ void FSWebServer::run()
 {
     this->handleClient();
     if (m_apmode)
+    if (m_dnsServer != nullptr)
+    {
         m_dnsServer->processNextRequest();
+    }
 
     if (m_websocket != nullptr)
         m_websocket->loop();
@@ -294,7 +297,7 @@ IPAddress FSWebServer::startWiFi(uint32_t timeout, bool apFlag, CallbackF fn)
         mdns_instance_name_set(MDNS_INSTANCE);
         // add our services
         mdns_service_add(NULL, "_http", "_tcp", 80, NULL, 0);
-        mdns_service_add(NULL, "_arduino", "_tcp", 3232, NULL, 0);
+        //mdns_service_add(NULL, "_arduino", "_tcp", 3232, NULL, 0);
         mdns_service_instance_name_set("_http", "_tcp", MDNS_INSTANCE);
         mdns_service_subtype_add_for_host(MDNS_INSTANCE, "_http", "_tcp", NULL, "_server");
 
@@ -1167,10 +1170,10 @@ void FSWebServer::handleStatus()
 
 #endif // ESP_FS_WS_EDIT
 
-void FSWebServer::printFileList(fs::FS &fs, Print &p, const char *dirName, uint8_t level)
+void FSWebServer::printFileList(Print &p, const char *dirName, uint8_t level)
 {
     p.printf("\n%s\n", dirName);
-    File root = fs.open(dirName, "r");
+    File root =  m_filesystem->open(dirName, "r");
     if (!root)
     {
         p.println("- failed to open directory");
@@ -1202,9 +1205,9 @@ void FSWebServer::printFileList(fs::FS &fs, Print &p, const char *dirName, uint8
             if (level)
             {
 #ifdef ESP32
-                printFileList(fs, p, file.path(), level - 1);
+                printFileList( p, file.path(), level - 1);
 #elif defined(ESP8266)
-                printFileList(fs, p, file.fullName(), level - 1);
+                printFileList( p, file.fullName(), level - 1);
 #endif
             }
         }

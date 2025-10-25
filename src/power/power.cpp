@@ -11,19 +11,21 @@
 #include "pins.hpp"
 #include "power/power.hpp"
 #include "wifi/wifi.hpp"
-
+#include "fast_led/fast_led.hpp"
 namespace power
 {
 
     esp_sleep_wakeup_cause_t wakeup_reason;
+    bool isCharging = false;
+    bool isVbusInserted = false;
+    bool isBatteryLowLevel = false;
+    bool isBatteryCriticalLevel = false;
+    bool isPekeyShortPressed = false;
 
     void loopPower(void *arg);
 
     XPowersPMU PMU;
-    XPowersPMU &getPMU()
-    {
-        return PMU;
-    }
+
     EventGroupHandle_t pmuIrqEvent;
 
     void IRAM_ATTR setFlag(void)
@@ -129,7 +131,7 @@ namespace power
             // XPOWERS_PKEY_NEGATIVE_IRQ | XPOWERS_PKEY_POSITIVE_IRQ   |   //POWER KEY
         );
 
-        pinMode(PMU_INPUT_PIN, INPUT);
+        pinMode(PMU_INPUT_PIN, INPUT_PULLUP);
         attachInterrupt(PMU_INPUT_PIN, setFlag, FALLING);
 
         /*
@@ -154,50 +156,21 @@ namespace power
 
         // Set the time of pressing the button to turn off
         PMU.setPowerKeyPressOffTime(XPOWERS_POWEROFF_4S);
-        uint8_t opt = PMU.getPowerKeyPressOffTime();
-        Serial.print("PowerKeyPressOffTime:");
-        switch (opt)
-        {
-        case XPOWERS_POWEROFF_4S:
-            Serial.println("4 Second");
-            break;
-        case XPOWERS_POWEROFF_6S:
-            Serial.println("6 Second");
-            break;
-        case XPOWERS_POWEROFF_8S:
-            Serial.println("8 Second");
-            break;
-        case XPOWERS_POWEROFF_10S:
-            Serial.println("10 Second");
-            break;
-        default:
-            break;
-        }
-
+        PMU.setPowerKeyPressOnTime(XPOWERS_POWERON_128MS);
         // Get the default low pressure warning percentage setting
-        uint8_t low_warn_per = PMU.getLowBatWarnThreshold();
-        mqttLogger.printf("Default low battery warning threshold is %d percentage\n", low_warn_per);
-
-        //
         // setLowBatWarnThreshold Range:  5% ~ 20%
         // The following data is obtained from actual testing , Please see the description below for the test method.
         // 20% ~= 3.7v
-        // 15% ~= 3.6v
-        // 10% ~= 3.55V
-        // 5%  ~= 3.5V
         // 1%  ~= 3.4V
         PMU.setLowBatWarnThreshold(8); // Set to trigger interrupt when reaching 5%
                                        // Get the low voltage warning percentage setting
-        low_warn_per = PMU.getLowBatWarnThreshold();
-        mqttLogger.printf("Set low battery warning threshold is %d percentage\n", low_warn_per);
+        PMU.enableInternalDischarge();
 
         // setLowBatShutdownThreshold Range:  0% ~ 15%
         // The following data is obtained from actual testing , Please see the description below for the test method.
         // 15% ~= 3.6v
-        // 10% ~= 3.55V
-        // 5%  ~= 3.5V
         // 1%  ~= 3.4V
-        PMU.setLowBatShutdownThreshold(4); // Set to trigger interrupt when reaching 1%
+        PMU.setLowBatShutdownThreshold(3); // Set to trigger interrupt when reaching 1%
         // Get the default low voltage shutdown percentage setting
         uint8_t low_shutdown_per = PMU.getLowBatShutdownThreshold();
         mqttLogger.printf("Default low battery shutdown threshold is %d percentage\n", low_shutdown_per);
@@ -229,11 +202,12 @@ namespace power
 
     void loopPower(void *arg)
     {
-        uint32_t loopMillis = 0;
-        uint8_t lowPwoerNotification = 5;
         mqttLogger.println("entering power loop");
         while (1)
         {
+            isVbusInserted = PMU.isVbusIn();
+            isBatteryCriticalLevel = PMU.getBatteryPercent() <= 2;
+            isBatteryLowLevel = PMU.getBatteryPercent() <= 8;
             auto event = xEventGroupWaitBits(pmuIrqEvent, 0b01, pdTRUE, pdTRUE, pdMS_TO_TICKS(5000));
             if (event & 0b01)
             {
@@ -242,10 +216,12 @@ namespace power
                 if (PMU.isVbusInsertIrq())
                 {
                     mqttLogger.println("isVbusInsert");
+                    isVbusInserted = true;
                 }
                 if (PMU.isVbusRemoveIrq())
                 {
                     mqttLogger.println("isVbusRemove");
+                    isVbusInserted = false;
                 }
                 if (PMU.isBatInsertIrq())
                 {
@@ -258,6 +234,7 @@ namespace power
                 if (PMU.isPekeyShortPressIrq())
                 {
                     mqttLogger.println("isPekeyShortPress");
+                    isPekeyShortPressed = true;
                 }
                 if (PMU.isPekeyLongPressIrq())
                 {
@@ -275,24 +252,16 @@ namespace power
                 // set the threshold through getLowBatWarnThreshold( 5% ~ 20% )
                 if (PMU.isDropWarningLevel2Irq())
                 {
-                    if (lowPwoerNotification++ > 10)
-                    {
-                        mqttLogger.println("The voltage percentage has reached the low voltage warning threshold!!!");
-                    }
+                    mqttLogger.println("isDropWarningLevel2Irq");
+                    isBatteryLowLevel = true;
                 }
 
                 // When the set low-voltage battery percentage shutdown threshold is reached
                 // set the threshold through setLowBatShutdownThreshold()
                 if (PMU.isDropWarningLevel1Irq())
                 {
-                    uint8_t i = 4;
-                    while (i--)
-                    {
-                        mqttLogger.printf("The voltage percentage has reached the low voltage shutdown threshold and will shut down in %d seconds.\n", i);
-                        delay(1000);
-                    }
-                    // Turn off all power supplies, leaving only the RTC power supply. The RTC power supply cannot be turned off.
-                    PMU.shutdown();
+                    mqttLogger.println("isDropWarningLevel1Irq");
+                    isBatteryCriticalLevel = true;
                 }
                 // For more interrupt sources, please check XPowersLib
                 // Clear PMU Interrupt Status Register
@@ -416,6 +385,86 @@ namespace power
         return wakeup_reason;
     }
 
+    XPowersPMU &getPMU()
+    {
+        return PMU;
+    }
+
+    bool isBattCharging()
+    {
+        return isCharging;
+    }
+    bool isPowerVBUSOn()
+    {
+        return isVbusInserted;
+    }
+    bool isBatLowLevel()
+    {
+        return isBatteryLowLevel;
+    }
+    bool isBatCriticalLevel()
+    {
+        return isBatteryCriticalLevel;
+    }
+    bool iskeyShortPressed()
+    {
+        if (isPekeyShortPressed)
+        {
+            isPekeyShortPressed = false;
+            return true;
+        }
+        return false;
+    }
+
+    void DeepSleepWith_IMU_PMU_Wake()
+    {
+        // Configure wakeup source: IMU interrupt pin
+        fast_led::set_blink(false);
+        if ((isBatteryLowLevel == false && isBatteryCriticalLevel == false) || isVbusInserted)
+        {
+            mqttLogger.println("Battery level is not critical, skip deep sleep");
+            return;
+        }
+        mqttLogger.println("Entering deep sleep mode with IMU and PMU wakeup");
+        detachInterrupt(PMU_INPUT_PIN);
+        detachInterrupt(MOTION_INTRRUPT_PIN);
+        uint64_t wakeup_mask = (1ULL << MOTION_INTRRUPT_PIN) | (1ULL << PMU_INPUT_PIN);
+        Serial.println("Going to sleep now with mask " + String(wakeup_mask, BIN) + "...");
+        ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup_io(wakeup_mask, ESP_EXT1_WAKEUP_ANY_LOW));
+        delay(100);
+        fast_led::set_fast_led(0, {5, 10, 0}); // turn off led before sleep
+        do
+        {
+            delay(100); // wait for car start to be released
+        } while (isVbusInserted);
+
+        esp_deep_sleep_start();
+    }
+
+    void DeepSleepWith_PMU_Wake()
+    {
+        fast_led::set_blink(false);
+        if ((isBatteryLowLevel == false && isBatteryCriticalLevel == false) || isVbusInserted)
+        {
+            mqttLogger.println("Battery level is not critical, skip deep sleep");
+            return;
+        }
+        mqttLogger.println("Entering deep sleep mode with IMU and PMU wakeup");
+        // Configure wakeup source: IMU interrupt pin
+        detachInterrupt(PMU_INPUT_PIN);
+        detachInterrupt(MOTION_INTRRUPT_PIN);
+        uint64_t wakeup_mask = (1ULL << PMU_INPUT_PIN);
+        Serial.println("Going to sleep now with mask " + String(wakeup_mask, BIN) + "...");
+        ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup_io(wakeup_mask, ESP_EXT1_WAKEUP_ANY_LOW));
+        delay(100);
+        fast_led::set_fast_led(0, {10, 0, 0}); // turn off led before sleep
+        do
+        {
+            delay(100); // wait for car start to be released
+        } while (isVbusInserted);
+
+        esp_deep_sleep_start();
+    }
 };
 
 // CAM DVDD 1500~1800mV

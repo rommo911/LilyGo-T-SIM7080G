@@ -23,14 +23,14 @@ jobs:
       - name: Build PlatformIO Project
         env:
           PLATFORMIO_BUILD_FLAGS: -D PIO_CI
-                                  -D WIFI_PASS=\"${{secrets.WIFI_PASS}}\"
-                                  -D WIFI_SSID=\"${{secrets.SSID}}\"
-                                  -D MQTT_SERVER=\"${{secrets.MQTT_SERVER}}\"
-                                  -D MQTT_TOPIC=\"${{secrets.MQTT_TOPIC}}\" 
-                                  -D CMD_TOPIC=\"${{secrets.CMD_TOPIC}}\"
-                                  -D MQTT_USER=\"${{secrets.MQTT_USER}}\"
-                                  -D MQTT_PASS=\"${{secrets.MQTT_PASS}}\"
-                                  -D MQTT_PORT=${{secrets.MQTT_PORT || 1833}}
+                                  # -D WIFI_PASS=\"${{secrets.WIFI_PASS}}\"
+                                  # -D WIFI_SSID=\"${{secrets.SSID}}\"
+                                  # -D MQTT_SERVER=\"${{secrets.MQTT_SERVER}}\"
+                                  # -D MQTT_TOPIC=\"${{secrets.MQTT_TOPIC}}\" 
+                                  # -D CMD_TOPIC=\"${{secrets.CMD_TOPIC}}\"
+                                  # -D MQTT_USER=\"${{secrets.MQTT_USER}}\"
+                                  # -D MQTT_PASS=\"${{secrets.MQTT_PASS}}\"
+                                  # -D MQTT_PORT=${{secrets.MQTT_PORT || 1833}}
         run: pio run -e usb
 
       - name: Get current timestamp

@@ -24,5 +24,7 @@ namespace imu_dmp
   uint64_t getLastMovedTimestamp();
   void resetBaseline();
   uint64_t get_last_baseline_reset();
+  bool setupLowPowerMode();
+  bool shutdown();
 
 }

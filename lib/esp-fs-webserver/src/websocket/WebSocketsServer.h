@@ -28,7 +28,7 @@
 #include "WebSockets.h"
 
 #ifndef WEBSOCKETS_SERVER_CLIENT_MAX
-#define WEBSOCKETS_SERVER_CLIENT_MAX (5)
+#define WEBSOCKETS_SERVER_CLIENT_MAX (9)
 #endif
 
 class WebSocketsServerCore : protected WebSockets {

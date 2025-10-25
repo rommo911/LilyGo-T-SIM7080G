@@ -11,44 +11,54 @@ extern const char *mqttPass;
 extern const char *cmdTopic;
 extern const char *mqttTopic;
 bool timeIsSynced = false;
+bool wifiOn = false;
 extern uint32_t mqtt_port;
 uint32_t last_ota_time = 0;
-static String mqttReceStr;
+TaskHandle_t WifiTaskHandle = NULL;
+void setUpWifiOTA(void *arg);
+
+void SetupArduinoOTA();
+
+bool setupWifiSTA();
+
+void setUpWifiAP();
+
+bool GetWifiOn()
+{
+  return wifiOn;
+}
 
 WiFiClient espClient;
 PubSubClient mqttclient(espClient);
+void MqttReceiveCallback(char *topic, byte *payload, unsigned int length);
 
 MqttLogger mqttLogger(mqttclient, mqttTopic, MqttLoggerMode::MqttAndSerial);
 
-void MqttReceiveCallback(char *topic, byte *payload, unsigned int length)
+void StartWifi()
 {
-  // Safely convert payload (which may not be null-terminated) into a String.
-  const unsigned int MAX_PAYLOAD = 1024; // prevent excessive allocation
-  unsigned int len = length;
-  if (len > MAX_PAYLOAD)
+  if (wifiOn == false)
   {
-    len = MAX_PAYLOAD;
-    mqttLogger.println("Warning: payload truncated due to size");
+    SetupArduinoOTA();
+    setUpWifiOTA(NULL);
   }
-
-  char *buf = (char *)malloc(len + 1);
-  if (buf == NULL)
+  else
   {
-    mqttLogger.println("Error: malloc failed in MqttReceiveCallback");
-    return;
+    mqttLogger.println("WiFi OTA task already running");
   }
+}
 
-  if (len > 0)
+void StopWifi()
+{
+  wifiOn = false;
+  delay(100);
+  WiFi.disconnect(true);
+  delay(100);
+  WiFi.mode(WIFI_OFF);
+  delay(100);
+  if (WifiTaskHandle != NULL)
   {
-    memcpy(buf, payload, len);
+    vTaskDelete(WifiTaskHandle);
   }
-  buf[len] = '\0'; // ensure null termination
-
-  mqttReceStr = String(buf);
-  free(buf);
-
-  Serial.printf("got message on topic %s = %s \n", topic, mqttReceStr.c_str());
-  // handle message arrived
 }
 
 bool syncntpTime()
@@ -71,7 +81,7 @@ bool syncntpTime()
   while (now < 24 * 3600 && retry < 30)
   {
     Serial.println("Waiting for NTP time sync...");
-    delay(150);
+    delay(250);
     now = time(nullptr);
     retry++;
   }
@@ -97,30 +107,84 @@ bool syncntpTime()
   return false;
 }
 
+void loopWifiStation(void *arg)
+{
+  uint8_t mqttReconnectCounter = 0;
+  while (wifiOn == true)
+  {
+    if (WiFi.status() != WL_CONNECTED)
+    {
+      delay(250);
+      continue;
+    }
+    while (!mqttclient.connected() && mqttReconnectCounter++ < 3)
+    {
+      mqttLogger.println("Attempting MQTT connection...\n");
+      // Attempt to connect
+      if (mqttclient.connect("ESP32Tsim7080Logger", mqttUser, mqttPass))
+      {
+        // as we have a connection here, this will be the first message published to the mqtt server
+        mqttLogger.println("connected.");
+        mqttclient.subscribe(cmdTopic, 1);
+        mqttReconnectCounter = 0;
+        mqttLogger.println("MQTT subscription complete ");
+      }
+      else
+      {
+        mqttLogger.printf("failed, rc=%d \n", mqttclient.state());
+        // Wait before retrying
+        delay(500);
+      }
+    }
+    mqttReconnectCounter = 0;
+    mqttclient.loop();
+    ArduinoOTA.handle();
+    fs::GetmyWebServer().run();
+  }
+  mqttclient.disconnect();
+  ArduinoOTA.end();
+  fs::GetmyWebServer().stop();
+  Serial.println("loopWifiAP thread exit");
+  vTaskDelete(NULL);
+}
+
+void loopWifiAP(void *arg)
+{
+  while (wifiOn == true)
+  {
+    ArduinoOTA.handle();
+    fs::GetmyWebServer().run();
+    delay(10);
+  }
+  ArduinoOTA.end();
+  fs::GetmyWebServer().stop();
+  Serial.println("loopWifiAP thread exit");
+  vTaskDelete(NULL);
+}
 void setUpWifiOTA(void *arg)
 {
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, wifiPassword);
-  uint32_t counter = 0;
-  Serial.print("connecting to wifi .");
-  while (WiFi.status() != WL_CONNECTED && counter++ < 50)
+  wifiOn = true;
+  if (setupWifiSTA())
   {
-    delay(500);
-    Serial.print(".");
+    mqttLogger.println("WiFi STA setup complete ");
+    mqttLogger.println("OTA Ready");
+    String IP = String("IP address:") + WiFi.localIP().toString();
+    syncntpTime();
+    xTaskCreate(loopWifiStation, "WiFiSTA", 8192, NULL, 1, &WifiTaskHandle);
+    mqttLogger.println("WiFi STA end setup ");
   }
-  if (WiFi.status() != WL_CONNECTED)
+  else
   {
-    WiFi.disconnect(true);
-    delay(100);
-    vTaskDelete(NULL);
+    mqttLogger.println("WiFi STA setup failed ");
+    mqttLogger.println("WiFi AP setup starting ");
+    setUpWifiAP();
+    xTaskCreate(loopWifiAP, "WiFiAP", 8192, NULL, 1, &WifiTaskHandle);
+    mqttLogger.println("WiFi AP task ending ");
   }
-  mqttclient.setCallback(MqttReceiveCallback);
-  mqttclient.setServer(mqtt_server, mqtt_port);
-  mqttclient.connect("ESP32Tsim7080Logger", mqttUser, mqttPass);
-  Serial.println("");
-  Serial.println("WiFi connected");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP());
+}
+
+void SetupArduinoOTA()
+{
   ArduinoOTA
       .onStart([]()
                {
@@ -156,42 +220,33 @@ void setUpWifiOTA(void *arg)
         Serial.println("End Failed");
       } });
   ArduinoOTA.setHostname("ESP32_Tsim7080GRami");
-  ArduinoOTA.begin();
+}
 
-  fs::fs_server_setup(fs::FServerSource::SDcard);
-  syncntpTime();
-  while (1)
+bool setupWifiSTA()
+{
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, wifiPassword);
+  uint32_t counter = 0;
+  Serial.print("connecting to wifi .");
+  while (WiFi.status() != WL_CONNECTED && counter++ < 50)
   {
-    if (WiFi.status() != WL_CONNECTED)
-    {
-      delay(1000);
-      continue;
-    }
-    while (!mqttclient.connected())
-    {
-      mqttLogger.println("Attempting MQTT connection...\n");
-      // Attempt to connect
-      if (mqttclient.connect("ESP32Tsim7080Logger", mqttUser, mqttPass))
-      {
-        // as we have a connection here, this will be the first message published to the mqtt server
-        mqttLogger.println("connected.");
-        mqttclient.subscribe(cmdTopic, 1);
-      }
-      else
-      {
-        mqttLogger.printf("failed, rc=%d \n", mqttclient.state());
-        // Wait 5 seconds before retrying
-        delay(5000);
-      }
-    }
-    mqttclient.loop();
-    ArduinoOTA.handle();
-    if (fs::myWebServer != nullptr)
-    {
-      fs::myWebServer->run();
-    }
-    delay(5);
+    delay(500);
+    Serial.print(".");
   }
+  if (WiFi.status() != WL_CONNECTED)
+  {
+    WiFi.disconnect(true);
+    return false;
+  }
+
+  mqttclient.setCallback(MqttReceiveCallback);
+  mqttclient.setServer(mqtt_server, mqtt_port);
+  mqttclient.connect("ESP32Tsim7080", mqttUser, mqttPass);
+  Serial.print("WiFi connected IP address: ");
+  Serial.println(WiFi.localIP());
+  ArduinoOTA.begin();
+  fs::fs_server_setup(fs::FServerSource::LittleFS);
+  return true;
 }
 
 void setUpWifiAP()
@@ -199,5 +254,7 @@ void setUpWifiAP()
   WiFi.mode(WIFI_AP);
   uint32_t counter = 0;
   Serial.print("creating wifi .");
-  fs::fs_server_setup();
+  WiFi.softAP("ESP32rami_Tsim7080G_AP", "11112222");
+  fs::fs_server_setup(fs::FServerSource::SDcard);
+  ArduinoOTA.begin();
 }

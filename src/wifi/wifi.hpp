@@ -5,7 +5,6 @@
 extern MqttLogger mqttLogger;
 extern PubSubClient mqttclient;
 
-void setupMqttLogger();
-
-void setUpWifiOTA(void * arg);
-void setUpWifiAP();
+void StartWifi();
+bool GetWifiOn();
+void StopWifi();
