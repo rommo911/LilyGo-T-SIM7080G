@@ -12,6 +12,8 @@
 #include "power/power.hpp"
 #include "wifi/wifi.hpp"
 #include "fast_led/fast_led.hpp"
+#include "modem/modem.hpp"
+#include "sdcard/sdcard.h"
 namespace power
 {
 
@@ -134,14 +136,6 @@ namespace power
         pinMode(PMU_INPUT_PIN, INPUT_PULLUP);
         attachInterrupt(PMU_INPUT_PIN, setFlag, FALLING);
 
-        /*
-        The default setting is CHGLED is automatically controlled by the PMU.
-        - XPOWERS_CHG_LED_OFF,
-        - XPOWERS_CHG_LED_BLINK_1HZ,
-        - XPOWERS_CHG_LED_BLINK_4HZ,
-        - XPOWERS_CHG_LED_ON,
-        - XPOWERS_CHG_LED_CTRL_CHG,
-        * */
         PMU.setChargingLedMode(XPOWERS_CHG_LED_ON);
 
         // Set the precharge charging current
@@ -206,7 +200,7 @@ namespace power
         while (1)
         {
             isVbusInserted = PMU.isVbusIn();
-            isBatteryCriticalLevel = PMU.getBatteryPercent() <= 2;
+            isBatteryCriticalLevel = PMU.getBatteryPercent() <= 3;
             isBatteryLowLevel = PMU.getBatteryPercent() <= 8;
             auto event = xEventGroupWaitBits(pmuIrqEvent, 0b01, pdTRUE, pdTRUE, pdMS_TO_TICKS(5000));
             if (event & 0b01)
@@ -420,14 +414,16 @@ namespace power
     {
         // Configure wakeup source: IMU interrupt pin
         fast_led::set_blink(false);
-        if ((isBatteryLowLevel == false && isBatteryCriticalLevel == false) || isVbusInserted)
+        if (isVbusInserted)
         {
-            mqttLogger.println("Battery level is not critical, skip deep sleep");
+            mqttLogger.println("isVbusInserted skip deep sleep");
             return;
         }
         mqttLogger.println("Entering deep sleep mode with IMU and PMU wakeup");
         detachInterrupt(PMU_INPUT_PIN);
         detachInterrupt(MOTION_INTRRUPT_PIN);
+        modem::shutdownModem();
+        sdcard::shutdownSdcard();
         uint64_t wakeup_mask = (1ULL << MOTION_INTRRUPT_PIN) | (1ULL << PMU_INPUT_PIN);
         Serial.println("Going to sleep now with mask " + String(wakeup_mask, BIN) + "...");
         ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup_io(wakeup_mask, ESP_EXT1_WAKEUP_ANY_LOW));
@@ -444,11 +440,13 @@ namespace power
     void DeepSleepWith_PMU_Wake()
     {
         fast_led::set_blink(false);
-        if ((isBatteryLowLevel == false && isBatteryCriticalLevel == false) || isVbusInserted)
+        if (isVbusInserted)
         {
-            mqttLogger.println("Battery level is not critical, skip deep sleep");
+            mqttLogger.println("isVbusInserted, skip deep sleep");
             return;
         }
+        modem::shutdownModem();
+        sdcard::shutdownSdcard();
         mqttLogger.println("Entering deep sleep mode with IMU and PMU wakeup");
         // Configure wakeup source: IMU interrupt pin
         detachInterrupt(PMU_INPUT_PIN);
