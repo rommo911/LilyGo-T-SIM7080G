@@ -25,11 +25,11 @@ void MqttLogger::setTopic(const char *_topic)
 
 size_t MqttLogger::printf(const char *format, ...)
 {
-    if (this->client->connected() == false)
+    if (this->client == nullptr)
     {
         return 0;
     }
-    char loc_buf[256];
+    char loc_buf[128];
     char *temp = loc_buf;
     va_list arg;
     va_list copy;
@@ -44,19 +44,22 @@ size_t MqttLogger::printf(const char *format, ...)
     }
     if (len >= (int)sizeof(loc_buf))
     { // comparation of same sign type for the compiler
-        temp = (char *)malloc(len + 1);
+        temp = (char *)malloc(len + 50);
         if (temp == NULL)
         {
             va_end(arg);
             return 0;
         }
-        len = vsnprintf(temp, len + 1, format, arg);
+        len = vsnprintf(temp, len + 50, format, arg);
     }
     va_end(arg);
     bool ret = true;
-    if (this->mode != MqttLoggerMode::SerialOnly)
+    if (this->mode != MqttLoggerMode::SerialOnly && client != nullptr)
     {
-        ret = this->client->publish(this->topic, (byte *)temp, (size_t)len, retained);
+        if (this->client->connected() == true)
+        {
+            ret = this->client->publish(this->topic, temp, retained);
+        }
     }
     if (this->mode != MqttLoggerMode::MqttOnly)
     {
@@ -71,10 +74,6 @@ size_t MqttLogger::printf(const char *format, ...)
 
 size_t MqttLogger::printf(const char *_topic, const char *format, ...)
 {
-    if (this->client->connected() == false)
-    {
-        return 0;
-    }
     char loc_buf[256];
     char *temp = loc_buf;
     va_list arg;
@@ -90,19 +89,22 @@ size_t MqttLogger::printf(const char *_topic, const char *format, ...)
     }
     if (len >= (int)sizeof(loc_buf))
     { // comparation of same sign type for the compiler
-        temp = (char *)malloc(len + 1);
+        temp = (char *)malloc(len + 50);
         if (temp == NULL)
         {
             va_end(arg);
             return 0;
         }
-        len = vsnprintf(temp, len + 1, format, arg);
+        len = vsnprintf(temp, len + 50, format, arg);
     }
     va_end(arg);
     bool ret = true;
-    if (this->mode != MqttLoggerMode::SerialOnly)
+    if (this->mode != MqttLoggerMode::SerialOnly && client != nullptr)
     {
-        ret = this->client->publish(_topic, (byte *)temp, (size_t)len, retained);
+        if (this->client->connected() == true)
+        {
+            ret = this->client->publish(_topic, temp, retained);
+        }
     }
     if (this->mode != MqttLoggerMode::MqttOnly)
     {
@@ -120,13 +122,16 @@ size_t MqttLogger::println(const char *_topic, const char *s)
     if (s == nullptr)
         return 0;
     bool ret = true;
-    if (this->mode != MqttLoggerMode::SerialOnly)
+    if (this->mode != MqttLoggerMode::SerialOnly && client != nullptr)
     {
-        ret = this->client->publish(_topic, (byte *)s, strlen(s), retained);
+        if (this->client->connected() == true)
+        {
+            ret = this->client->publish(_topic, s, retained);
+        }
     }
     if (this->mode != MqttLoggerMode::MqttOnly)
     {
-        Serial.printf("%s : %s\n\r", _topic, s);
+        Serial.printf("topic %s: %s\n", _topic, s);
     }
     return ret ? (size_t)strlen(s) : -1;
 }
@@ -136,9 +141,12 @@ size_t MqttLogger::println(const char *s)
     if (s == nullptr)
         return 0;
     bool ret = true;
-    if (this->mode != MqttLoggerMode::SerialOnly)
+    if (this->mode != MqttLoggerMode::SerialOnly && client != nullptr)
     {
-        ret = this->client->publish(this->topic, (byte *)s, strlen(s), retained);
+        if (this->client->connected() == true)
+        {
+            ret = this->client->publish(this->topic, s, retained);
+        }
     }
     if (this->mode != MqttLoggerMode::MqttOnly)
     {

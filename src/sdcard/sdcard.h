@@ -10,6 +10,7 @@
 
 namespace sdcard
 {
+    
     bool setupSdcard();
     
     bool shutdownSdcard();

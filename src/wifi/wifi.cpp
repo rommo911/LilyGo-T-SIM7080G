@@ -10,7 +10,7 @@ extern const char *mqttUser;
 extern const char *mqttPass;
 extern const char *cmdTopic;
 extern const char *mqttTopic;
-
+bool timeIsSynced = false;
 extern uint32_t mqtt_port;
 uint32_t last_ota_time = 0;
 static String mqttReceStr;
@@ -68,10 +68,10 @@ bool syncntpTime()
   // Wait for time to be set
   time_t now = time(nullptr);
   int retry = 0;
-  while (now < 24 * 3600 && retry < 50)
+  while (now < 24 * 3600 && retry < 30)
   {
     Serial.println("Waiting for NTP time sync...");
-    delay(50);
+    delay(150);
     now = time(nullptr);
     retry++;
   }
@@ -85,6 +85,7 @@ bool syncntpTime()
       strftime(strftime_buf, sizeof(strftime_buf), "%A, %B %d %Y %H:%M:%S %Z", &timeinfo);
       Serial.printf("NTP Synchronized. Current Paris time: %s\n", strftime_buf);
       // rtc::setRtcTimeDateFromSystemTime();
+      timeIsSynced = true;
       return true;
     }
     else
@@ -92,6 +93,7 @@ bool syncntpTime()
       Serial.println("Failed to obtain time");
     }
   }
+  timeIsSynced = false;
   return false;
 }
 
@@ -112,7 +114,9 @@ void setUpWifiOTA(void *arg)
     delay(100);
     vTaskDelete(NULL);
   }
-
+  mqttclient.setCallback(MqttReceiveCallback);
+  mqttclient.setServer(mqtt_server, mqtt_port);
+  mqttclient.connect("ESP32Tsim7080Logger", mqttUser, mqttPass);
   Serial.println("");
   Serial.println("WiFi connected");
   Serial.println("IP address: ");
@@ -151,13 +155,18 @@ void setUpWifiOTA(void *arg)
       } else if (error == OTA_END_ERROR) {
         Serial.println("End Failed");
       } });
+  ArduinoOTA.setHostname("ESP32_Tsim7080GRami");
   ArduinoOTA.begin();
-  mqttclient.setCallback(MqttReceiveCallback);
-  mqttclient.setServer(mqtt_server, mqtt_port);
-  fs::fs_server_setup();
+
+  fs::fs_server_setup(fs::FServerSource::SDcard);
   syncntpTime();
   while (1)
   {
+    if (WiFi.status() != WL_CONNECTED)
+    {
+      delay(1000);
+      continue;
+    }
     while (!mqttclient.connected())
     {
       mqttLogger.println("Attempting MQTT connection...\n");
@@ -177,7 +186,11 @@ void setUpWifiOTA(void *arg)
     }
     mqttclient.loop();
     ArduinoOTA.handle();
-    fs::myWebServer.run();
+    if (fs::myWebServer != nullptr)
+    {
+      fs::myWebServer->run();
+    }
+    delay(5);
   }
 }
 

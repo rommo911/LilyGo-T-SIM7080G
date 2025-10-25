@@ -10,7 +10,14 @@
 
 namespace fs
 {
-    extern FSWebServer myWebServer;
+    enum class FServerSource
+    {
+        LittleFS,
+        SDcard
+    };
+    extern FSWebServer* myWebServer;
+    bool fs_server_setup(FServerSource source = FServerSource::LittleFS);
+
     static const String style =
         "<style>#file-input,input{width:100%;height:44px;border-radius:4px;margin:10px auto;font-size:15px}"
         "input{background:#f1f1f1;border:0;padding:0 15px}body{background:#3498db;font-family:sans-serif;font-size:14px;color:#777}"
@@ -176,6 +183,5 @@ namespace fs
         "</script>" +
         style;
 
-    void fs_server_setup(void);
 }
 #endif

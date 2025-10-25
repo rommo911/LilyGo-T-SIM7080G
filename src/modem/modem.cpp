@@ -426,9 +426,10 @@ namespace modem
             SetGPRS(false);
             SetGPS(false);
             modem7080g.sendAT("+CRESET");
-            power::getPMU().disableDC3();
             Serial1.end();
         }
+        power::getPMU().disableDC3();   // disable modem power
+        power::getPMU().disableBLDO2(); // disable GPS power
         return true;
     }
 

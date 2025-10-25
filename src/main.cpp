@@ -23,39 +23,26 @@ void setup()
     bool ret = false;
     fast_led::fast_led_init();
     Serial.begin(115200);
-
     uint8_t counter = 0;
+    power::setupPower();
     while (!Serial && counter++ < 5)
     {
         delay(1000);
     };
-    delay(1000);
-    xTaskCreate(setUpWifiOTA, "ota", 4096, NULL, 5, NULL);
-    // setUpWifiAP();
-    delay(4500);
-
-    Serial.println();
-
-    Serial.println("=========================================");
-
     power::getWakeupReason();
-
-    power::setupPower();
-
-    Serial.println("=========================================");
-
-    // sdcard::setupSdcard();
+    modem::shutdownModem();
+    delay(500);
+    xTaskCreate(setUpWifiOTA, "ota", 4096, NULL, 1, NULL);
+    // setUpWifiAP();
 
     Serial.println("=========================================");
 
-    if (imu_dmp::imu_setup())
+    if (false)//imu_dmp::imu_setup())
     {
-        Serial.println("IMU setup complete");
         mqttLogger.println("IMU setup complete ");
     }
     else
     {
-        Serial.println("IMU setup failed");
         mqttLogger.println("IMU setup failed ");
         // fast_led::set_fast_led(0, CRGB::Red);
         // fast_led::set_blink(true, 200);
@@ -66,12 +53,13 @@ void setup()
         // }
         // ESP.restart();
     }
-    bool modRet = modem::initModem7080();
+
+    /*bool modRet = modem::initModem7080();
     if (modRet)
     {
         modem::setRF(false);
         modem::SetGPS(true);
-    }
+    }*/
 }
 
 void loop()

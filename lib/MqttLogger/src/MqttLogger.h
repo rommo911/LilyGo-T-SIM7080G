@@ -9,8 +9,10 @@
 #ifndef MqttLogger_h
 #define MqttLogger_h
 
-#include <Arduino.h>
-#include <Print.h>
+#define MQTT_MAX_PACKET_SIZE 2048
+#define MQTT_KEEPALIVE 10
+#define MQTT_SOCKET_TIMEOUT 30
+
 #include <PubSubClient.h>
 
 enum MqttLoggerMode

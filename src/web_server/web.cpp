@@ -6,18 +6,27 @@
 #include "ArduinoJson.h"   // For JSON parsing
 #include "LittleFS.h"
 #include <Update.h>
+#include "sdcard/sdcard.h"
+#include "wifi/wifi.hpp"
+#include "SD_MMC.h"
 
 namespace fs
 {
   static const unsigned long loginTimeout = 5 * 60 * 1000; // 5 minutes in milliseconds
 
-  FSWebServer myWebServer(LittleFS, 80, "rami-jazz");
+  FSWebServer * myWebServer = nullptr; 
 
   void getFsInfo(fsInfo_t *fsInfo)
   {
     fsInfo->fsName = "LittleFS";
     fsInfo->totalBytes = LittleFS.totalBytes();
     fsInfo->usedBytes = LittleFS.usedBytes();
+  }
+  void getSdcardInfo(fsInfo_t *fsInfo)
+  {
+    fsInfo->fsName = "SDCard";
+    fsInfo->totalBytes = SD_MMC.totalBytes();
+    fsInfo->usedBytes = SD_MMC.usedBytes();
   }
 
   /* Helper function to generate success response page */
@@ -31,15 +40,31 @@ namespace fs
                      "</body></html>";
   }
 
-  void fs_server_setup(void)
+  bool fs_server_setup(FServerSource source)
   {
     // FILESYSTEM INIT
-    Serial.println("Initializing LittleFS...");
-    if (!LittleFS.begin(false, "/littlefs", 10))
+    Serial.println("Initializing FS...");
+    if (source == FServerSource::LittleFS)
     {
-      Serial.println("ERROR on mounting filesystem.");
-      return;
+      if (!LittleFS.begin(false, "/littlefs", 10))
+      {
+        Serial.println("ERROR on mounting filesystem.");
+        return false;
+      }
+      myWebServer = new FSWebServer(LittleFS, 80, "ESP32_LittleFS");
+      myWebServer->enableFsCodeEditor(getFsInfo);
     }
+    else
+    {
+      if (sdcard::setupSdcard() == false)
+      {
+        mqttLogger.println("ERROR on mounting SDcard filesystem.");
+        return false;
+      }
+      myWebServer = new FSWebServer(SD_MMC, 80, "ESP32_SD_MMC");
+      myWebServer->enableFsCodeEditor(getSdcardInfo);
+    }
+
     Preferences preferences;
     preferences.begin("auth-settings", true);
     String storedUser = preferences.getString("username", "admin");
@@ -53,47 +78,47 @@ namespace fs
     {
       Serial.printf("Stored credentials: User=%s, Pwd=%s\n", storedUser.c_str(), storedPwd.c_str());
     }
-    myWebServer.setAuthentication(storedUser.c_str(), storedPwd.c_str());
-    myWebServer.setAP("rami-jazz", "11112222");
-    myWebServer.startWiFi(5000);
-    myWebServer.printFileList(LittleFS, Serial, "/", 2);
-    myWebServer.enableFsCodeEditor(getFsInfo);
+    myWebServer->setAuthentication(storedUser.c_str(), storedPwd.c_str());
+    myWebServer->setAP("rami-jazz", "11112222");
+    myWebServer->startWiFi(5000);
+    myWebServer->printFileList(LittleFS, Serial, "/", 2);
 
-    myWebServer.on("/car", HTTP_GET, [&]()
+    myWebServer->on("/car", HTTP_GET, [&]()
                    {
-                  if(!myWebServer.authenticate_internal())
+                  if(!myWebServer->authenticate_internal())
                   {
                       Serial.println("Authentication failed, redirecting to login page.");
-                    return myWebServer.requestAuthentication();
+                    return myWebServer->requestAuthentication();
                   }
-                myWebServer.sendHeader("Connection", "close");
-                myWebServer.send(200, "text/html", serverIndex); });
+                myWebServer->sendHeader("Connection", "close");
+                myWebServer->send(200, "text/html", serverIndex); });
 
     /* Time and Date Page */
-    myWebServer.on("/timeDate", HTTP_GET, [&]()
+    myWebServer->on("/timeDate", HTTP_GET, [&]()
                    {
-                  if(!myWebServer.authenticate_internal())
+                  if(!myWebServer->authenticate_internal())
                   {
                       Serial.println("Authentication failed, redirecting to login page.");
-                    return myWebServer.requestAuthentication();
+                    return myWebServer->requestAuthentication();
                   }
-              myWebServer.sendHeader("Connection", "close");
-              myWebServer.send(200, "text/html", timeDatePage); });
+              myWebServer->sendHeader("Connection", "close");
+              myWebServer->send(200, "text/html", timeDatePage); });
 
     /* Set Time */
-    myWebServer.on("/setTime", HTTP_POST, [&]() {
-        if(!myWebServer.authenticate_internal()) {
+    myWebServer->on("/setTime", HTTP_POST, [&]()
+                   {
+        if(!myWebServer->authenticate_internal()) {
             Serial.println("Authentication failed, redirecting to login page.");
-            return myWebServer.requestAuthentication();
+            return myWebServer->requestAuthentication();
         }
-        if (myWebServer.hasArg("plain")) {
-            String body = myWebServer.arg("plain");
+        if (myWebServer->hasArg("plain")) {
+            String body = myWebServer->arg("plain");
             JsonDocument doc;
             DeserializationError error = deserializeJson(doc, body);
             
             if (error) {
                 Serial.println("Failed to parse JSON");
-                myWebServer.send(400, "text/html", generateSuccessPage("Invalid JSON format"));
+                myWebServer->send(400, "text/html", generateSuccessPage("Invalid JSON format"));
                 return;
             }
 
@@ -121,42 +146,41 @@ namespace fs
                     strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S %Z", localtime(&now));
                     Serial.printf("Time set successfully to time: %s\n", buffer);
                     
-                    myWebServer.send(200, "text/html", generateSuccessPage("Time set successfully to: " + String(buffer)));
+                    myWebServer->send(200, "text/html", generateSuccessPage("Time set successfully to: " + String(buffer)));
                 } else {
                     Serial.println("Failed to set system time");
-                    myWebServer.send(500, "text/html", generateSuccessPage("Failed to set system time"));
+                    myWebServer->send(500, "text/html", generateSuccessPage("Failed to set system time"));
                 }
             } else {
                 Serial.println("Failed to parse datetime string");
-                myWebServer.send(400, "text/html", generateSuccessPage("Invalid datetime format"));
+                myWebServer->send(400, "text/html", generateSuccessPage("Invalid datetime format"));
             }
         } else {
-            myWebServer.send(400, "text/html", generateSuccessPage("No data received"));
-        }
-    });
+            myWebServer->send(400, "text/html", generateSuccessPage("No data received"));
+        } });
 
     /* BLE iBeacon UUID Page */
-    myWebServer.on("/bleUUID", HTTP_GET, [&]()
+    myWebServer->on("/bleUUID", HTTP_GET, [&]()
                    {
-                  if(!myWebServer.authenticate_internal())
+                  if(!myWebServer->authenticate_internal())
                   {
                       Serial.println("Authentication failed, redirecting to login page.");
-                    return myWebServer.requestAuthentication();
+                    return myWebServer->requestAuthentication();
                   }
-              myWebServer.sendHeader("Connection", "close");
-              myWebServer.send(200, "text/html", bleUUIDPage); });
+              myWebServer->sendHeader("Connection", "close");
+              myWebServer->send(200, "text/html", bleUUIDPage); });
 
     /* Set BLE iBeacon UUID */
-    myWebServer.on("/setUUID", HTTP_POST, [&]()
+    myWebServer->on("/setUUID", HTTP_POST, [&]()
                    {
-                  if(!myWebServer.authenticate_internal())
+                  if(!myWebServer->authenticate_internal())
                  {
                     Serial.println("Authentication failed, redirecting to login page.");
-                   return myWebServer.requestAuthentication();
+                   return myWebServer->requestAuthentication();
                   }
-              if (myWebServer.hasArg("plain"))
+              if (myWebServer->hasArg("plain"))
               {
-                String body = myWebServer.arg("plain");
+                String body = myWebServer->arg("plain");
                 JsonDocument doc;
                 deserializeJson(doc, body);
                 String uuid = doc["uuid"];
@@ -165,24 +189,24 @@ namespace fs
                 preferences.putString("ibeacon_uuid", uuid);
                 preferences.end();
                 Serial.printf("Saved UUID: %s\n", uuid.c_str());
-                myWebServer.send(200, "text/html", generateSuccessPage("UUID saved successfully!"));
+                myWebServer->send(200, "text/html", generateSuccessPage("UUID saved successfully!"));
               }
               else
               {
-                myWebServer.send(400, "text/html", generateSuccessPage("Failed to save UUID."));
+                myWebServer->send(400, "text/html", generateSuccessPage("Failed to save UUID."));
               } });
 
     /* Change Username and Password */
-    myWebServer.on("/setCredentials", HTTP_POST, [&]()
+    myWebServer->on("/setCredentials", HTTP_POST, [&]()
                    {
-    if(!myWebServer.authenticate_internal())
+    if(!myWebServer->authenticate_internal())
     {
         Serial.println("Authentication failed, redirecting to login page.");
-      return myWebServer.requestAuthentication();
+      return myWebServer->requestAuthentication();
     }
-    if (myWebServer.hasArg("plain"))
+    if (myWebServer->hasArg("plain"))
     {
-      String body = myWebServer.arg("plain");
+      String body = myWebServer->arg("plain");
       JsonDocument doc;
       deserializeJson(doc, body);
       String oldUser = doc["oldUser"];
@@ -206,14 +230,14 @@ namespace fs
         preferences.end();
 
         // Update authentication
-        myWebServer.setAuthentication(newUser.c_str(), newPwd.c_str());
+        myWebServer->setAuthentication(newUser.c_str(), newPwd.c_str());
 
         Serial.printf("Updated credentials: User=%s\n", newUser.c_str());
-        myWebServer.send(200, "text/html", generateSuccessPage("Credentials updated successfully!"));
+        myWebServer->send(200, "text/html", generateSuccessPage("Credentials updated successfully!"));
       }
       else
       {
-        myWebServer.send(401, "text/html", generateSuccessPage("Unauthorized: Old credentials are incorrect. or short new creditntials."));
+        myWebServer->send(401, "text/html", generateSuccessPage("Unauthorized: Old credentials are incorrect. or short new creditntials."));
         Serial.println("Unauthorized: Old credentials are incorrect or short new credentials."); 
         //pring what is wrring witrh the credentials including current credentials
         Serial.printf("Current User: %s, Current Pwd: %s\n", storedUser.c_str(), storedPwd.c_str());
@@ -222,28 +246,28 @@ namespace fs
     }
     else
     {
-      myWebServer.send(400, "text/html", generateSuccessPage("Failed to update credentials."));
+      myWebServer->send(400, "text/html", generateSuccessPage("Failed to update credentials."));
       Serial.println("Failed to update credentials, no args.");
     } });
 
     /* Change Credentials Page */
-    myWebServer.on("/changeCredentials", HTTP_GET, [&]()
+    myWebServer->on("/changeCredentials", HTTP_GET, [&]()
                    {
-                if(!myWebServer.authenticate_internal())
+                if(!myWebServer->authenticate_internal())
                 {
                     Serial.println("Authentication failed, redirecting to login page.");
-                  return myWebServer.requestAuthentication();
+                  return myWebServer->requestAuthentication();
                 }
-              myWebServer.sendHeader("Connection", "close");
-              myWebServer.send(200, "text/html", changeCredentialsPage); });
+              myWebServer->sendHeader("Connection", "close");
+              myWebServer->send(200, "text/html", changeCredentialsPage); });
 
     /* Get Current Time */
-    myWebServer.on("/getCurrentTime", HTTP_GET, [&]()
+    myWebServer->on("/getCurrentTime", HTTP_GET, [&]()
                    {
-                  if(!myWebServer.authenticate_internal())
+                  if(!myWebServer->authenticate_internal())
                   {
                       Serial.println("Authentication failed, redirecting to login page.");
-                    return myWebServer.requestAuthentication();
+                    return myWebServer->requestAuthentication();
                   }
               time_t now = time(nullptr);
               struct tm *timeinfo = localtime(&now);
@@ -251,26 +275,26 @@ namespace fs
               strftime(buffer, sizeof(buffer), "%Y-%m-%d %H:%M:%S", timeinfo);
               String currentTime = String(buffer);
               String jsonResponse = "{\"currentTime\": \"" + currentTime + "\"}";
-              myWebServer.send(200, "application/json", jsonResponse); });
+              myWebServer->send(200, "application/json", jsonResponse); });
 
-
-              myWebServer.on("/getCurrentUUID", HTTP_GET, [&]()
+    myWebServer->on("/getCurrentUUID", HTTP_GET, [&]()
                    {
-                  if(!myWebServer.authenticate_internal())
+                  if(!myWebServer->authenticate_internal())
                   {
                       Serial.println("Authentication failed, redirecting to login page.");
-                    return myWebServer.requestAuthentication();
+                    return myWebServer->requestAuthentication();
                   }
               Preferences preferences;
               preferences.begin("ble-settings", true);
               String uuid = preferences.getString("ibeacon_uuid", "00000000-0000-0000-0000-000000000000");
               preferences.end();
               String jsonResponse = "{\"uuid\": \"" + uuid + "\"}";
-              myWebServer.send(200, "application/json", jsonResponse); });
-    myWebServer.onNotFound([]()
-                           { myWebServer.send(404, "text/plain", "404: Not Found"); });
+              myWebServer->send(200, "application/json", jsonResponse); });
+    myWebServer->onNotFound([]()
+                           { myWebServer->send(404, "text/plain", "404: Not Found"); });
 
-    myWebServer.begin();
+    myWebServer->begin();
+    return true;
   }
 
   /* Helper function to check if the session is still valid */

@@ -26,10 +26,9 @@ namespace power
     }
     EventGroupHandle_t pmuIrqEvent;
 
-
     void IRAM_ATTR setFlag(void)
     {
-        xEventGroupSetBits(pmuIrqEvent,0b1);
+        xEventGroupSetBits(pmuIrqEvent, 0b1);
     }
 
     bool setupPower()
@@ -45,8 +44,8 @@ namespace power
         if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED)
         {
             mqttLogger.println("it is a power cycle, restart modem ?");
-            //PMU.disableDC3();
-            // Wait 200ms
+            // PMU.disableDC3();
+            //  Wait 200ms
             delay(200);
         }
 
@@ -74,8 +73,6 @@ namespace power
         // ESP32S3 Core VDD 3300mV Don't change, default turn on
         PMU.setDC1Voltage(3300);
         PMU.enableDC1();
-
-       
 
         // External row needle, 1400~3700mV // external supply from pmu to header
         PMU.setDC5Voltage(3200);
@@ -143,10 +140,10 @@ namespace power
         - XPOWERS_CHG_LED_ON,
         - XPOWERS_CHG_LED_CTRL_CHG,
         * */
-        PMU.setChargingLedMode(XPOWERS_CHG_LED_BLINK_1HZ);
+        PMU.setChargingLedMode(XPOWERS_CHG_LED_ON);
 
         // Set the precharge charging current
-        PMU.setPrechargeCurr(XPOWERS_AXP2101_PRECHARGE_50MA);
+        PMU.setPrechargeCurr(XPOWERS_AXP2101_PRECHARGE_100MA);
         // Set constant current charge current limit
         PMU.setChargerConstantCurr(XPOWERS_AXP2101_CHG_CUR_1000MA);
         // Set stop charging termination current
@@ -205,6 +202,28 @@ namespace power
         uint8_t low_shutdown_per = PMU.getLowBatShutdownThreshold();
         mqttLogger.printf("Default low battery shutdown threshold is %d percentage\n", low_shutdown_per);
         xTaskCreate(loopPower, "power", 4096, NULL, 1, NULL);
+
+        switch ((uint8_t)PMU.getBatteryPercent())
+        {
+        case 90 ... 100:
+        {
+            PMU.setChargingLedMode(XPOWERS_CHG_LED_ON);
+            break;
+        }
+        case 50 ... 84:
+        {
+            PMU.setChargingLedMode(XPOWERS_CHG_LED_BLINK_1HZ);
+            break;
+        }
+        case 0 ... 49:
+        {
+            PMU.setChargingLedMode(XPOWERS_CHG_LED_BLINK_4HZ);
+            break;
+        }
+        default:
+        {
+        }
+        }
         return true;
     }
 
@@ -215,8 +234,8 @@ namespace power
         mqttLogger.println("entering power loop");
         while (1)
         {
-            auto event = xEventGroupWaitBits(pmuIrqEvent,0b01,pdTRUE,pdTRUE,pdMS_TO_TICKS(50000));
-            if (event& 0b01)
+            auto event = xEventGroupWaitBits(pmuIrqEvent, 0b01, pdTRUE, pdTRUE, pdMS_TO_TICKS(5000));
+            if (event & 0b01)
             {
                 // Get PMU Interrupt Status Register
                 uint32_t status = PMU.getIrqStatus();
@@ -296,7 +315,7 @@ namespace power
                         PMU.setChargingLedMode(XPOWERS_CHG_LED_BLINK_1HZ);
                         break;
                     }
-                    case 1 ... 49:
+                    case 0 ... 49:
                     {
                         PMU.setChargingLedMode(XPOWERS_CHG_LED_BLINK_4HZ);
                         break;
@@ -320,7 +339,7 @@ namespace power
                         delay(1500);
                     }
                 }
-                Serial.printf("%s BatteryPercent:%d , voltage %d \n\r", PMU.isCharging() ? "charging" : "Not charging", PMU.getBatteryPercent(), PMU.getBattVoltage());
+                mqttLogger.printf(" %d level:%d %% ,vol %d \n", PMU.isCharging() ? 1 : 0, PMU.getBatteryPercent(), PMU.getBattVoltage());
             }
             else
             {
@@ -399,23 +418,22 @@ namespace power
 
 };
 
+// CAM DVDD 1500~1800mV
+// PMU.setALDO1Voltage(1800);
+// PMU.enableALDO1();
 
- // CAM DVDD 1500~1800mV
-        // PMU.setALDO1Voltage(1800);
-        // PMU.enableALDO1();
+// CAM DVDD 2500~2800mV
+// PMU.setALDO2Voltage(2800);
+// PMU.enableALDO2();
 
-        // CAM DVDD 2500~2800mV
-        // PMU.setALDO2Voltage(2800);
-        // PMU.enableALDO2();
+// CAM AVDD 2800~3000mV
+// PMU.setALDO4Voltage(3000);
+// PMU.enableALDO4();
 
-        // CAM AVDD 2800~3000mV
-        // PMU.setALDO4Voltage(3000);
-        // PMU.enableALDO4();
+// Modem 2700~3400mV VDD
+// PMU.setDC3Voltage(3000);
+// PMU.enableDC3();
 
-        // Modem 2700~3400mV VDD
-        // PMU.setDC3Voltage(3000);
-        // PMU.enableDC3();
-
-        // Modem GPS Power
-        // PMU.setBLDO2Voltage(3300);
-        // PMU.enableBLDO2();
+// Modem GPS Power
+// PMU.setBLDO2Voltage(3300);
+// PMU.enableBLDO2();
