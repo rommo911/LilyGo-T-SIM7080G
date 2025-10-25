@@ -94,7 +94,6 @@ void setup()
 }
 
 static uint64_t LastWifiOnTimestamp = 0;
-bool simulatedPowerKeyTrigger = false;
 bool simulatedMotionTrigger = false;
 bool simulatedLowPowerTrigger = false;
 bool simulatedCriticalLowPowerTrigger = false;
@@ -103,19 +102,17 @@ void loopPowerCheck()
     // Serial.println("Checking power status...loop");
     carEverStarted |= power::isPowerVBUSOn();
 
-    if (power::isBatCriticalLevel())
+    if (power::isBatCriticalLevel() || simulatedLowPowerTrigger)
     {
+        simulatedLowPowerTrigger = false;
         mqttLogger.println("Battery critical level detected in main loop");
         imu_dmp::shutdown();
         power::DeepSleepWith_PMU_Wake();
     }
-    if (power::isBatLowLevel())
+    if (power::isBatLowLevel() || simulatedCriticalLowPowerTrigger)
     {
+        simulatedCriticalLowPowerTrigger = false;
         mqttLogger.println("Battery low level detected in main loop");
-        if (GetWifiOn())
-        {
-            StopWifi();
-        }
         imu_dmp::setupLowPowerMode();
         power::DeepSleepWith_IMU_PMU_Wake();
     }
@@ -177,28 +174,24 @@ void loopImuMotion()
         no_motion_debounce = 0;
         motion_Calibrate_debounce = 0;
     }
+    simulatedMotionTrigger = false;
 }
 
 void loopWifiStatus()
 {
-    if (power::iskeyShortPressed() || simulatedPowerKeyTrigger)
+    if (power::iskeyShortPressed())
     {
-        simulatedPowerKeyTrigger = false;
         mqttLogger.println("Power key short pressed detected in main loop");
         if (!GetWifiOn())
         {
             LastWifiOnTimestamp = millis();
             StartWifi();
         }
-        else
-        {
-            // If WiFi task is already running, check if we need to stop it
-            if ((millis() - LastWifiOnTimestamp) > (1 * 60 * 1000)) // 10 minutes
-            {
-                mqttLogger.println("Stopping WiFi OTA task due to timeout");
-                StopWifi();
-            }
-        }
+    }
+    if (GetWifiOn() && (millis() - LastWifiOnTimestamp > 1000 * 60 * 5))
+    {
+        mqttLogger.println("WiFi on timeout reached, turning off WiFi");
+        StopWifi();
     }
 }
 
@@ -217,4 +210,3 @@ void loop()
     }
     delay(1000);
 }
-

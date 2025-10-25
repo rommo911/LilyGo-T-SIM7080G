@@ -1,5 +1,8 @@
 
 #include "wifi/wifi.hpp"
+extern bool simulatedMotionTrigger ;
+extern bool simulatedLowPowerTrigger ;
+extern bool simulatedCriticalLowPowerTrigger ;
 
 void MqttReceiveCallback(char *topic, byte *payload, unsigned int length)
 {
@@ -29,7 +32,23 @@ void MqttReceiveCallback(char *topic, byte *payload, unsigned int length)
 
     mqttReceStr = String(buf);
     free(buf);
-
+    if (mqttReceStr.length() < 1)
+    {
+        mqttLogger.println("Warning: received empty payload");
+        return;
+    }
+    if (mqttReceStr == "motion_trigger")
+    {
+        simulatedMotionTrigger = true;
+    }
+    if (mqttReceStr == "low_power_trigger")
+    {
+        simulatedLowPowerTrigger = true;
+    }
+    if (mqttReceStr == "critical_low_power_trigger")
+    {
+        simulatedCriticalLowPowerTrigger = true;
+    }
     Serial.printf("got message on topic %s = %s \n", topic, mqttReceStr.c_str());
     // handle message arrived
 }

@@ -58,6 +58,7 @@ void StopWifi()
   if (WifiTaskHandle != NULL)
   {
     vTaskDelete(WifiTaskHandle);
+    WifiTaskHandle = NULL;
   }
 }
 
@@ -145,7 +146,7 @@ void loopWifiStation(void *arg)
   ArduinoOTA.end();
   fs::GetmyWebServer().stop();
   Serial.println("loopWifiAP thread exit");
-  vTaskDelete(NULL);
+  delay(1000000);
 }
 
 void loopWifiAP(void *arg)
@@ -159,8 +160,9 @@ void loopWifiAP(void *arg)
   ArduinoOTA.end();
   fs::GetmyWebServer().stop();
   Serial.println("loopWifiAP thread exit");
-  vTaskDelete(NULL);
+  delay(1000000);
 }
+
 void setUpWifiOTA(void *arg)
 {
   wifiOn = true;
@@ -170,7 +172,7 @@ void setUpWifiOTA(void *arg)
     mqttLogger.println("OTA Ready");
     String IP = String("IP address:") + WiFi.localIP().toString();
     syncntpTime();
-    xTaskCreate(loopWifiStation, "WiFiSTA", 8192, NULL, 1, &WifiTaskHandle);
+    xTaskCreate(loopWifiStation, "WiFiSTA", 8192, NULL, 5, &WifiTaskHandle);
     mqttLogger.println("WiFi STA end setup ");
   }
   else
@@ -178,7 +180,7 @@ void setUpWifiOTA(void *arg)
     mqttLogger.println("WiFi STA setup failed ");
     mqttLogger.println("WiFi AP setup starting ");
     setUpWifiAP();
-    xTaskCreate(loopWifiAP, "WiFiAP", 8192, NULL, 1, &WifiTaskHandle);
+    xTaskCreate(loopWifiAP, "WiFiAP", 8192, NULL, 5, &WifiTaskHandle);
     mqttLogger.println("WiFi AP task ending ");
   }
 }
