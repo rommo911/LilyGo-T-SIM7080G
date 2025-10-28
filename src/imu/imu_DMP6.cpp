@@ -31,13 +31,12 @@
 #include "imu_DMP6.hpp"
 #include "pins.hpp"
 #include "wifi/wifi.hpp"
-namespace imu_dmp
+namespace imu6050_dmp
 {
 
   // #include "MPU6050_6Axis_MotionApps612.h" // Uncomment this library to work with DMP 6.12 and comment on the above library.
 
   /* MPU6050 default I2C address is 0x68*/
-  MPU6050 mpu;
   // MPU6050 mpu(0x69); //Use for AD0 high
   // MPU6050 mpu(0x68, &Wire1); //Use for AD0 low, but 2nd Wire (TWI/I2C) object.
 
@@ -87,6 +86,8 @@ namespace imu_dmp
   SemaphoreHandle_t imuSemaphore;
   void imu_loop(void *arg);
 
+  MPU6050 mpu(MPU6050_ADDRESS_AD0_LOW, &Wire1);
+
   /*------Interrupt detection routine------*/
   volatile bool MPUInterrupt = false; // Indicates whether MPU6050 interrupt pin has gone high
 
@@ -97,7 +98,13 @@ namespace imu_dmp
 
   bool imu_setup()
   {
-    Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN, 400000); // Start I2C bus
+    //Wire1.end();
+    bool ret = Wire1.begin(I2C_SDA_PIN, I2C_SCL_PIN, 400000); // Start I2C bus
+    if (!ret)
+    {
+      mqttLogger.println("I2C bus failed to start");
+      return false;
+    }
     vSemaphoreCreateBinary(imuSemaphore);         // 400kHz I2C clock. Comment on this line if having compilation difficulties
     xSemaphoreGive(imuSemaphore);
     uint8_t counter = 0;
@@ -111,11 +118,12 @@ namespace imu_dmp
     Serial.println(F("Testing MPU6050 connection..."));
     if (mpu.testConnection() == false)
     {
+      Serial.println("MPU6050 connection failed. Attempting reconnection...");
       mpu.reset();
       delay(250);
+      Serial.println("Re-initializing MPU6050...");
       mpu.initialize();
       delay(150);
-      mpu.setWakeCycleEnabled(false); // Enable wake on motion detection
       if (mpu.testConnection() == false)
       {
         mqttLogger.println("MPU6050 connection failed");
@@ -139,7 +147,7 @@ namespace imu_dmp
     mpu.setYAccelOffset(0);
     mpu.setZAccelOffset(0);
     // set interrupt to active low
-    mpu.setInterruptMode(1);
+    mpu.setInterruptMode(0);
 
     /* Making sure it worked (returns 0 if so) */
     if (devStatus == 0)
@@ -235,11 +243,12 @@ namespace imu_dmp
 
   void imu_loop(void *arg)
   {
+    Serial.println("Starting IMU DMP loop...");
     while (imu_dmp_loop)
     {
       if (!DMPReady || !MPUInterrupt)
       {
-        delay(1);
+        delay(10);
         continue;
       }
       if (!baseline_ready)

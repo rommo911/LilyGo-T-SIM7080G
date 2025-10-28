@@ -6,7 +6,7 @@
 namespace fast_led
 {
 
-    #define NUM_LEDS 1
+    #define NUM_LEDS 2
 
     std::mutex fast_led_mtx;
     std::mutex fast_led_mtx2;
@@ -64,8 +64,9 @@ namespace fast_led
         FastLED.addLeds<WS2811, PIXEL_LED_PIN, GRB>(leds, NUM_LEDS);
         xTaskCreate(blink_loop, "blink_loop", 4096, NULL, 1, &blinkTask);
         xTaskCreate(loop_fast_led, "loop_fast_led", 4096, NULL, 1, NULL);
+        delay(10);
         set_fast_led(0, CRGB::Blue);
-        delay(500);
+        delay(400);
         set_fast_led(0, CRGB::Black);
     }
 

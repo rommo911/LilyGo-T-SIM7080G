@@ -1,7 +1,7 @@
 
 #include "pins.hpp"
 #include <Arduino.h>
-namespace imu6050_dmp
+namespace imu6500_dmp
 {
   typedef struct MotionDtect
   {

@@ -6,10 +6,7 @@ const gpio_num_t CAM_PIN = GPIO_NUM_46;
 const gpio_num_t I2C_SDA_PIN = GPIO_NUM_9; //
 const gpio_num_t I2C_SCL_PIN = GPIO_NUM_10; //
 const gpio_num_t MOTION_INTRRUPT_PIN = GPIO_NUM_11; //
-const gpio_num_t CAR_START_PIN = GPIO_NUM_12; // Start interrupt pin
 const gpio_num_t PIXEL_LED_PIN = GPIO_NUM_13;
-
-
 
 #define PWDN_GPIO_NUM               (-1)
 #define RESET_GPIO_NUM              (18)
@@ -32,10 +29,6 @@ const gpio_num_t PIXEL_LED_PIN = GPIO_NUM_13;
 #define I2C_SCL_POWER                     (7)
 
 #define PMU_INPUT_PIN               (6)
-
-#define BUTTON_CONUT                (1)
-#define USER_BUTTON_PIN             (0)
-#define BUTTON_ARRAY                {USER_BUTTON_PIN}
 
 #define BOARD_MODEM_PWR_PIN         (41)
 #define BOARD_MODEM_DTR_PIN         (42)

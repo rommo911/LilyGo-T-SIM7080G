@@ -14,15 +14,16 @@
 #include "fast_led/fast_led.hpp"
 #include "modem/modem.hpp"
 #include "sdcard/sdcard.h"
+#include <atomic>
 namespace power
 {
 
     esp_sleep_wakeup_cause_t wakeup_reason;
-    bool isCharging = false;
-    bool isVbusInserted = false;
-    bool isBatteryLowLevel = false;
-    bool isBatteryCriticalLevel = false;
-    bool isPekeyShortPressed = false;
+    std::atomic<bool> isCharging;
+    std::atomic<bool> isVbusInserted;
+    std::atomic<bool> isBatteryLowLevel;
+    std::atomic<bool> isBatteryCriticalLevel;
+    std::atomic<bool> isPekeyShortPressed;
 
     void loopPower(void *arg);
 
@@ -37,6 +38,11 @@ namespace power
 
     bool setupPower()
     {
+        isCharging = false;
+        isVbusInserted = false;
+        isBatteryLowLevel = false;
+        isBatteryCriticalLevel = false;
+        isPekeyShortPressed = false;
         if (!PMU.begin(Wire, AXP2101_SLAVE_ADDRESS, I2C_SDA_POWER, I2C_SCL_POWER))
         {
             mqttLogger.println("ERROR: Init PMU failed!");
@@ -54,7 +60,7 @@ namespace power
         }
 
         // Set VSY off voltage as 2600mV, Adjustment range 2600mV ~ 3300mV
-        PMU.setSysPowerDownVoltage(2800);
+        PMU.setSysPowerDownVoltage(3100);
 
         // Turn off not use power channel
         PMU.disableDC2();
@@ -79,16 +85,16 @@ namespace power
         PMU.enableDC1();
 
         // External row needle, 1400~3700mV // external supply from pmu to header
-        PMU.setDC5Voltage(3200);
+        PMU.setDC5Voltage(3450);
         PMU.enableDC5();
 
         // Set the minimum common working voltage of the PMU VBUS input,
         // below this value will turn off the PMU
-        PMU.setVbusVoltageLimit(XPOWERS_AXP2101_VBUS_VOL_LIM_4V20);
+        PMU.setVbusVoltageLimit(XPOWERS_AXP2101_VBUS_VOL_LIM_4V28);
 
         // Set the maximum current of the PMU VBUS input,
         // higher than this value will turn off the PMU
-        PMU.setVbusCurrentLimit(XPOWERS_AXP2101_VBUS_CUR_LIM_2000MA);
+        PMU.setVbusCurrentLimit(XPOWERS_AXP2101_VBUS_CUR_LIM_1000MA);
 
         // Set VSY off voltage as 2600mV , Adjustment range 2600mV ~ 3300mV
         PMU.setSysPowerDownVoltage(2800);
@@ -191,17 +197,20 @@ namespace power
         {
         }
         }
+        isVbusInserted = PMU.isVbusIn();
+        isBatteryCriticalLevel = PMU.getBatteryPercent() <= 3;
+        isBatteryLowLevel = PMU.getBatteryPercent() <= 8;
         return true;
     }
 
     void loopPower(void *arg)
     {
-        mqttLogger.println("entering power loop");
+        // mqttLogger.println("entering power loop");
         while (1)
         {
             isVbusInserted = PMU.isVbusIn();
-            isBatteryCriticalLevel = PMU.getBatteryPercent() <= 3;
-            isBatteryLowLevel = PMU.getBatteryPercent() <= 8;
+            isBatteryCriticalLevel = (PMU.getBatteryPercent() <= 3U);
+            isBatteryLowLevel = (PMU.getBatteryPercent() <= 8U);
             auto event = xEventGroupWaitBits(pmuIrqEvent, 0b01, pdTRUE, pdTRUE, pdMS_TO_TICKS(5000));
             if (event & 0b01)
             {
@@ -240,22 +249,19 @@ namespace power
                 }
                 if (PMU.isBatChagerStartIrq())
                 {
-                    Serial.println("isBatChagerStartIrq");
+                    mqttLogger.println("isBatChagerStartIrq");
                 }
                 // When the set low-voltage battery percentage warning threshold is reached,
                 // set the threshold through getLowBatWarnThreshold( 5% ~ 20% )
                 if (PMU.isDropWarningLevel2Irq())
                 {
                     mqttLogger.println("isDropWarningLevel2Irq");
-                    isBatteryLowLevel = true;
                 }
-
                 // When the set low-voltage battery percentage shutdown threshold is reached
                 // set the threshold through setLowBatShutdownThreshold()
                 if (PMU.isDropWarningLevel1Irq())
                 {
                     mqttLogger.println("isDropWarningLevel1Irq");
-                    isBatteryCriticalLevel = true;
                 }
                 // For more interrupt sources, please check XPowersLib
                 // Clear PMU Interrupt Status Register
@@ -462,6 +468,32 @@ namespace power
         } while (isVbusInserted);
 
         esp_deep_sleep_start();
+    }
+    WakeUpReason Get_wake_reason()
+    {
+        static WakeUpReason wakeUpReason = WakeUpReason::UNKNOWN;
+        if (wakeUpReason != WakeUpReason::UNKNOWN)
+        {
+            return wakeUpReason;
+        }
+        uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
+
+        wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
+        if (wakeup_pin_mask & ((uint64_t)1 << MOTION_INTRRUPT_PIN))
+        {
+            Serial.println(F("Wakeup cause detected: MPU motion interrupt"));
+            wakeUpReason = WakeUpReason::MOTION;
+        }
+        if (wakeup_pin_mask & ((uint64_t)1 << PMU_INPUT_PIN))
+        {
+            Serial.println(F("Wakeup cause detected: Start button"));
+            wakeUpReason = WakeUpReason::START;
+        }
+        else
+        {
+            Serial.printf(F("Wakeup cause detected: 0x%llx\n"), wakeup_pin_mask);
+        }
+        return wakeUpReason;
     }
 };
 

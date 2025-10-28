@@ -12,6 +12,12 @@
 
 namespace power
 {
+    enum WakeUpReason : uint8_t
+    {
+        MOTION = 0,
+        START = 1,
+        UNKNOWN = 2
+    };
     bool setupPower();
     esp_sleep_wakeup_cause_t getWakeupReason();
     XPowersPMU &getPMU();

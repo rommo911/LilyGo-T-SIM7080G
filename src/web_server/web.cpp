@@ -301,37 +301,24 @@ namespace fs
     }
     myServer.setAuthentication(storedUser.c_str(), storedPwd.c_str());
 
-    Serial.println("Serving files from SD Card filesystem:");
     myServer.printFileList(Serial, "/", 3);
-
-
     myServer.on("/car", HTTP_GET, handleCar);
-
     /* Time and Date Page */
     myServer.on("/timeDate", HTTP_GET, handleTimeDate);
-
     /* Set Time */
     myServer.on("/setTime", HTTP_POST, handleSetTime);
-
     /* BLE iBeacon UUID Page */
     myServer.on("/bleUUID", HTTP_GET, handleBleUUID);
-
     /* Set BLE iBeacon UUID */
     myServer.on("/setUUID", HTTP_POST, handleSetUUID);
-
     /* Change Username and Password */
     myServer.on("/setCredentials", HTTP_POST, handleSetCredentials);
-
     /* Change Credentials Page */
     myServer.on("/changeCredentials", HTTP_GET, handleChangeCredentials);
-
     /* Get Current Time */
     myServer.on("/getCurrentTime", HTTP_GET, handleGetCurrentTime);
-
     myServer.on("/getCurrentUUID", HTTP_GET, handleGetCurrentUUID);
-    // myServer.onNotFound([]()
-    //                        { GetmyWebServer().send(404, "text/plain", "404: Not Found"); });
-
+    
     myServer.begin();
     return true;
   }
