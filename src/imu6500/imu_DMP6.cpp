@@ -45,13 +45,13 @@ namespace imu6500_dmp
   motion_t globalmotiondata = {};
   motion_t InterruptMotion = {};
 
-  float MOTION_THRESHOLD_GX = 0.0030f; // sensitivity: ~0.03 g (~0.3 m/s^2)
-  float MOTION_THRESHOLD_GY = 0.0035f; // sensitivity: ~0.03 g (~0.3 m/s^2)
-  float MOTION_THRESHOLD_GZ = 0.0060f; // sensitivity: ~0.03 g (~0.3 m/s^2)
+  float MOTION_THRESHOLD_GX = 0.0045f; // sensitivity: ~0.03 g (~0.3 m/s^2)
+  float MOTION_THRESHOLD_GY = 0.0045f; // sensitivity: ~0.03 g (~0.3 m/s^2)
+  float MOTION_THRESHOLD_GZ = 0.0045f; // sensitivity: ~0.03 g (~0.3 m/s^2)
 
-  float MOTION_THRESHOLD_ROLL = 0.35f; // sensitivity: ~0.03 g (~0.3 m/s^2)
-  float MOTION_THRESHOLD_YAW = 0.2f;   // sensitivity: ~0.03 g (~0.3 m/s^2)
-  float MOTION_THRESHOLD_PITCH = 0.2f; // sensitivity: ~0.03 g (~0.3 m/s^2)
+  float MOTION_THRESHOLD_ROLL = 0.3f;  // sensitivity: ~0.03 g (~0.3 m/s^2)
+  float MOTION_THRESHOLD_YAW = 0.3f;   // sensitivity: ~0.03 g (~0.3 m/s^2)
+  float MOTION_THRESHOLD_PITCH = 0.3f; // sensitivity: ~0.03 g (~0.3 m/s^2)
 
   // Motion detection state
   // Baseline linear acceleration (gravity removed) in g's
@@ -171,8 +171,8 @@ namespace imu6500_dmp
       // External row needle, 1400~3700mV // external supply from pmu to header
       auto &PMU = power::getPMU();
       PMU.disableDC5();
-      delay(500);
-      PMU.setDC5Voltage(3300);
+      delay(1000);
+      PMU.setDC5Voltage(3400);
       PMU.enableDC5();
       if (mpu6500_dmp_init(MPU6500_INTERFACE_IIC,
                            MPU6500_ADDRESS_AD0_LOW,
@@ -204,12 +204,15 @@ namespace imu6500_dmp
       MPU_DMP_DATA_READY = false;
       MPU_MTION_Interrupt = false;
       float sx = 0.f, sy = 0.f, sz = 0.f, sroll = 0.0f, syaw = 0.0f, spitch = 0.0f;
+      float syaw_sin = 0.0f, syaw_cos = 0.0f;
+      float sroll_sin = 0.0f, sroll_cos = 0.0f;
+      float spitch_sin = 0.0f, spitch_cos = 0.0f;
       uint16_t collected = 0;
+      mpu6500_dmp_resetFIFO();
       Serial.printf("Baseline calibrate started \n\r");
       for (uint16_t i = 0; i < BASELINE_SAMPLES; ++i)
       {
-        mpu6500_dmp_resetFIFO();
-        delay(50);
+        delay(20);
         if (MPU_MTION_Interrupt)
         {
           Serial.printf("Baseline calibrate FAILED \n\r");
@@ -229,9 +232,17 @@ namespace imu6500_dmp
           sx += motionData.accel_g[i][0];
           sy += motionData.accel_g[i][1];
           sz += motionData.accel_g[i][2];
-          sroll += motionData.roll[i];
-          syaw += motionData.yaw[i];
-          spitch += motionData.pitch[i];
+
+          float yaw_rad = radians(motionData.yaw[i]);
+          float roll_rad = radians(motionData.roll[i]);
+          float pitch_rad = radians(motionData.pitch[i]);
+
+          syaw_sin += sin(yaw_rad);
+          syaw_cos += cos(yaw_rad);
+          sroll_sin += sin(roll_rad);
+          sroll_cos += cos(roll_rad);
+          spitch_sin += sin(pitch_rad);
+          spitch_cos += cos(pitch_rad);
           collected++;
         }
       }
@@ -240,9 +251,16 @@ namespace imu6500_dmp
         baseline_ax = sx / collected;
         baseline_ay = sy / collected;
         baseline_az = sz / collected;
-        baseline_yaw = syaw / collected;
-        baseline_pitch = spitch / collected;
-        baseline_roll = sroll / collected;
+        baseline_yaw = degrees(atan2(syaw_sin / collected, syaw_cos / collected));
+        baseline_pitch = degrees(atan2(spitch_sin / collected, spitch_cos / collected));
+        baseline_roll = degrees(atan2(sroll_sin / collected, sroll_cos / collected));
+
+        if (baseline_yaw < 0)
+          baseline_yaw += 360.0f;
+        if (baseline_pitch < 0)
+          baseline_pitch += 360.0f;
+        if (baseline_roll < 0)
+          baseline_roll += 360.0f;
         baseline_ready = true;
         Serial.println("Motion detected baseline ready ");
         Serial.printf(" ax %.5f, ay %.5f, az %.5f, yaw %.5f, pitch %.5f, roll %.5f \n", baseline_ax, baseline_ay, baseline_az, baseline_yaw, baseline_pitch, baseline_roll);
@@ -251,6 +269,12 @@ namespace imu6500_dmp
     }
 
     return baseline_ready;
+  }
+  
+  float angleDiff(float a, float b)
+  {
+    float d = fmodf(a - b + 540.0f, 360.0f) - 180.0f; // normalize to [-180,180)
+    return fabsf(d);
   }
 
   void imu_loop(void *arg)
@@ -278,22 +302,25 @@ namespace imu6500_dmp
         // // Compute delta from baseline
         uint16_t collected = 0;
         xSemaphoreTake(imuSemaphore, pdMS_TO_TICKS(15));
+        float sroll = 0.f, syaw = 0.f, spitch = 0.f;
         for (uint8_t i = 0; i < globalmotiondata.l; i++)
         {
           dax = fabs(globalmotiondata.accel_g[i][0] - baseline_ax);
           day = fabs(globalmotiondata.accel_g[i][1] - baseline_ay);
           daz = fabs(globalmotiondata.accel_g[i][2] - baseline_az);
-          droll = fabs(globalmotiondata.roll[i] - baseline_roll);
-          dyaw = fabs(globalmotiondata.yaw[i] - baseline_yaw);
-          dpitch = fabs(globalmotiondata.pitch[i] - baseline_pitch);
+
+          sroll += angleDiff(globalmotiondata.roll[i], baseline_roll);
+          syaw += angleDiff(globalmotiondata.yaw[i], baseline_yaw);
+          spitch += angleDiff(globalmotiondata.pitch[i], baseline_pitch);
+
           collected++;
         }
         dax /= collected;
         day /= collected;
         daz /= collected;
-        droll /= collected;
-        dyaw /= collected;
-        dpitch /= collected;
+        droll = sroll / collected;
+        dyaw = syaw / collected;
+        dpitch = spitch / collected;
         if (dax > MOTION_THRESHOLD_GX)
         {
           if (dax > 0.1f && (calibrationDebounce++ > 10))
@@ -329,7 +356,7 @@ namespace imu6500_dmp
         }
         if (droll > MOTION_THRESHOLD_ROLL)
         {
-          if (droll > 2 && (calibrationDebounce++ > 10))
+          if (droll > 1 && (calibrationDebounce++ > 10))
           {
             Serial.println("droll baseline calibration");
             resetBaseline();
@@ -340,7 +367,7 @@ namespace imu6500_dmp
         }
         if (dyaw > MOTION_THRESHOLD_YAW)
         {
-          if (dyaw > 2 && (calibrationDebounce++ > 10))
+          if (dyaw > 1 && (calibrationDebounce++ > 10))
           {
             Serial.println("dyaw baseline calibration");
             resetBaseline();
@@ -351,7 +378,7 @@ namespace imu6500_dmp
         }
         if (dpitch > MOTION_THRESHOLD_PITCH)
         {
-          if (dpitch > 2 && (calibrationDebounce++ > 10))
+          if (dpitch > 1 && (calibrationDebounce++ > 10))
           {
             Serial.println("dpitch baseline calibration");
             resetBaseline();
