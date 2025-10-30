@@ -40,7 +40,7 @@ void setup()
     power::getWakeupReason();
     modem::shutdownModem();
 
-    StartWifi();
+    // StartWifi();
 
     if (imu6500_dmp::imu_setup())
     {
@@ -49,15 +49,10 @@ void setup()
     else
     {
         mqttLogger.println("IMU setup failed ");
-        fast_led::set_fast_led(0, CRGB::Red);
-        fast_led::set_blink(true, 500);
+        fast_led::start_blink(0, CRGB::Red);
         delay(5000);
-        fast_led::set_blink(false, 500);
-        uint32_t counter = 0;
-        while (counter++ < 240)
-        {
-            delay(1000);
-        }
+        fast_led::stop_led(0);
+        delay(15);
         ESP.restart();
     }
 
@@ -67,7 +62,13 @@ void setup()
         modem::setRF(false);
         modem::SetGPS(true);
     }*/
-    fast_led::set_fast_led(0, {0, 0, 100});
+    fast_led::set_solid(0, {0, 0, 50});
+    // fast_led::start_blink(1, {0, 0, 50}, 200, 450, 3);
+    // delay(5000);
+    // fast_led::start_fade(1, {0, 0, 50}, CRGB::Red, 500);
+    // delay(5000);
+    // fast_led::start_fade(1, {0, 50, 0}, CRGB::Black, 500, 5);
+    // delay(5000);
 }
 
 static uint64_t LastWifiOnTimestamp = 0;
@@ -101,28 +102,20 @@ void loopImuMotion()
 {
     if (power::isPowerVBUSOn())
     {
-        return;
+        // return;
     }
-    if (!(motion || simulatedMotionTrigger) && (no_motion_debounce++ > 100U) && (millis() - imu6500_dmp::getLastMovedTimestamp() > No_MotionTimeout)) // no motion for 5s and car not started
+    motion = imu6500_dmp::imu_get_moved();
+    if ((millis() - imu6500_dmp::getLastMovedTimestamp() > No_MotionTimeout) && (no_motion_debounce++ > 100U)) // no motion for 5s and car not started
     {
         // sleep
-        mqttLogger.println("No motion and car off");
-        digitalWrite(CAM_PIN, LOW);
-        if (millis() + (3 * 60 * 1000) > imu6500_dmp::get_last_baseline_reset())
-        {
-            fast_led::set_fast_led(0, CRGB::Green);
-            motion_Calibrate_debounce = 0;
-            imu6500_dmp::resetBaseline();
-            mqttLogger.println("Motion Calibrate in no motion mode");
-            delay(250);
-        }
         if (ms_since_off_no_motion == 0)
         {
             ms_since_off_no_motion = millis();
         }
-        if (ms_since_off_no_motion > (millis() + (5U * 60U * 1000U)))
+        if (ms_since_off_no_motion > (millis() + (1U * 60U * 1000U)))
         {
-            mqttLogger.println("been a 5 minutes with no motion CanSleep NOW??");
+            mqttLogger.println("been a 1 minutes with no motion CanSleep NOW??");
+            digitalWrite(CAM_PIN, LOW);
         }
         no_motion_debounce = 0;
         motion_Calibrate_debounce = 0;
@@ -131,20 +124,9 @@ void loopImuMotion()
     {
         ms_since_off_no_motion = 0;
         digitalWrite(CAM_PIN, HIGH);
-        Serial.println("Motion detected ");
-        fast_led::set_fast_led(0, CRGB::Blue);
-        delay(50);
-        if (motion_Calibrate_debounce++ > 200)
-        {
-            fast_led::set_fast_led(0, CRGB::Green);
-            motion_Calibrate_debounce = 0;
-            imu6500_dmp::resetBaseline();
-            Serial.println("Motion calibration too much movement");
-            delay(250);
-        }
+        Serial.println("Loop Motion detected ");
+        fast_led::start_blink(0, CRGB::Blue, CRGB::Black, 75, 1000, 1);
         no_motion_debounce = 0;
-        fast_led::set_fast_led(0, CRGB(0, 0, 6));
-        delay(50);
     }
     if (!(motion || simulatedMotionTrigger))
     {
@@ -176,11 +158,11 @@ void loop()
 {
     loopWifiStatus();
     loopPowerCheck();
-    motion = imu6500_dmp::imu_get_moved();
-    if (motion)
-    {
-        mqttLogger.println("MPU loop Motion detected");
-    }
+    // motion = imu6500_dmp::imu_get_moved();
+    // if (motion)
+    // {
+    //     // mqttLogger.println("MPU loop Motion detected");
+    // }
     loopImuMotion();
-    delay(1000);
+    delay(10);
 }

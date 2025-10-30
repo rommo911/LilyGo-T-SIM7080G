@@ -85,7 +85,7 @@ namespace power
         PMU.enableDC1();
 
         // External row needle, 1400~3700mV // external supply from pmu to header
-        PMU.setDC5Voltage(3450);
+        PMU.setDC5Voltage(3300);
         PMU.enableDC5();
 
         // Set the minimum common working voltage of the PMU VBUS input,
@@ -419,7 +419,7 @@ namespace power
     void DeepSleepWith_IMU_PMU_Wake()
     {
         // Configure wakeup source: IMU interrupt pin
-        fast_led::set_blink(false);
+        fast_led::stop_led(0);
         if (isVbusInserted)
         {
             mqttLogger.println("isVbusInserted skip deep sleep");
@@ -434,7 +434,7 @@ namespace power
         Serial.println("Going to sleep now with mask " + String(wakeup_mask, BIN) + "...");
         ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup_io(wakeup_mask, ESP_EXT1_WAKEUP_ANY_LOW));
         delay(100);
-        fast_led::set_fast_led(0, {5, 10, 0}); // turn off led before sleep
+        fast_led::set_solid(0, {5, 5, 0}); // turn off led before sleep
         do
         {
             delay(100); // wait for car start to be released
@@ -445,7 +445,7 @@ namespace power
 
     void DeepSleepWith_PMU_Wake()
     {
-        fast_led::set_blink(false);
+        fast_led::stop_led(0);
         if (isVbusInserted)
         {
             mqttLogger.println("isVbusInserted, skip deep sleep");
@@ -460,13 +460,8 @@ namespace power
         uint64_t wakeup_mask = (1ULL << PMU_INPUT_PIN);
         Serial.println("Going to sleep now with mask " + String(wakeup_mask, BIN) + "...");
         ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup_io(wakeup_mask, ESP_EXT1_WAKEUP_ANY_LOW));
-        delay(100);
-        fast_led::set_fast_led(0, {10, 0, 0}); // turn off led before sleep
-        do
-        {
-            delay(100); // wait for car start to be released
-        } while (isVbusInserted);
-
+        fast_led::set_solid(0, {10, 0, 0}); // turn off led before sleep
+        delay(50);
         esp_deep_sleep_start();
     }
     WakeUpReason Get_wake_reason()

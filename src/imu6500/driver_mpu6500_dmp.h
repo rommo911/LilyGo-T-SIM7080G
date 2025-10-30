@@ -52,49 +52,42 @@ extern "C"
 /**
  * @brief mpu6500 dmp example default definition
  */
-#define MPU6500_DMP_DEFAULT_CLOCK_SOURCE                   MPU6500_CLOCK_SOURCE_PLL                  /**< pll */
-#define MPU6500_DMP_DEFAULT_RATE                           120                                        /**< 50Hz */
-#define MPU6500_DMP_DEFAULT_ACCELEROMETER_RANGE            MPU6500_ACCELEROMETER_RANGE_2G            /**< 2g */
-#define MPU6500_DMP_DEFAULT_GYROSCOPE_RANGE                MPU6500_GYROSCOPE_RANGE_2000DPS           /**< 2000dps */
-#define MPU6500_DMP_DEFAULT_LOW_PASS_FILTER                MPU6500_LOW_PASS_FILTER_3                 /**< low pass filter 3 */
-#define MPU6500_DMP_DEFAULT_CYCLE_WAKE_UP                  MPU6500_BOOL_FALSE                        /**< disable cycle wake up */
-#define MPU6500_DMP_DEFAULT_INTERRUPT_PIN_LEVEL            MPU6500_PIN_LEVEL_LOW                     /**< low level */
-#define MPU6500_DMP_DEFAULT_INTERRUPT_PIN_TYPE             MPU6500_PIN_TYPE_OPEN_DRAIN                /**< push pull */
-#define MPU6500_DMP_DEFAULT_INTERRUPT_MOTION               MPU6500_BOOL_TRUE                         /**< enable motion */
-#define MPU6500_DMP_DEFAULT_INTERRUPT_FIFO_OVERFLOW        MPU6500_BOOL_TRUE                         /**< enable fifo overflow */
-#define MPU6500_DMP_DEFAULT_INTERRUPT_DMP                  MPU6500_BOOL_TRUE                        /**< disable dmp */
-#define MPU6500_DMP_DEFAULT_INTERRUPT_FSYNC_INT            MPU6500_BOOL_FALSE                        /**< disable fsync int */
-#define MPU6500_DMP_DEFAULT_INTERRUPT_DATA_READY           MPU6500_BOOL_FALSE                        /**< disable data ready */
-#define MPU6500_DMP_DEFAULT_INTERRUPT_LATCH                MPU6500_BOOL_TRUE                         /**< enable latch */
-#define MPU6500_DMP_DEFAULT_INTERRUPT_READ_CLEAR           MPU6500_BOOL_TRUE                         /**< enable interrupt read clear */
-#define MPU6500_DMP_DEFAULT_EXTERN_SYNC                    MPU6500_EXTERN_SYNC_INPUT_DISABLED        /**< extern sync input disable */
-#define MPU6500_DMP_DEFAULT_FSYNC_INTERRUPT                MPU6500_BOOL_FALSE                        /**< disable fsync interrupt */
-#define MPU6500_DMP_DEFAULT_FSYNC_INTERRUPT_LEVEL          MPU6500_PIN_LEVEL_LOW                     /**< low level */
-#define MPU6500_DMP_DEFAULT_IIC_MASTER                     MPU6500_BOOL_FALSE                        /**< disable iic master */
-#define MPU6500_DMP_DEFAULT_IIC_BYPASS                     MPU6500_BOOL_FALSE                        /**< disable iic bypass */
-#define MPU6500_DMP_DEFAULT_TAP_TIME_MULTI                 350                                       /**< 200ms */
-#define MPU6500_DMP_DEFAULT_TAP_TIME                       50                                       /**< 100ms */
-#define MPU6500_DMP_DEFAULT_MIN_TAP_COUNT                  1                                         /**< 1 */
-#define MPU6500_DMP_DEFAULT_TAP_X_THRESH                   300                                       /**< 250 mg/ms */
-#define MPU6500_DMP_DEFAULT_TAP_Y_THRESH                   300                                       /**< 250 mg/ms */
-#define MPU6500_DMP_DEFAULT_TAP_Z_THRESH                   300                                       /**< 250 mg/ms */
-#define MPU6500_DMP_DEFAULT_INTERRUPT_MODE                 MPU6500_DMP_INTERRUPT_MODE_CONTINUOUS     /**< interrupt continuous mode */
-#define MPU6500_DMP_DEFAULT_MOTION_THRESHOLD               15                                        /**< 200 mg */
-#define MPU6500_DMP_DEFAULT_GYROSCOPE_STANDBY              MPU6500_BOOL_FALSE                        /**< disable gyro standby */
-#define MPU6500_DMP_DEFAULT_FIFO_MODE                      MPU6500_FIFO_MODE_STREAM                  /**< normal mode */
-#define MPU6500_DMP_DEFAULT_GYROSCOPE_CHOICE               0                                         /**< 0 */
-#define MPU6500_DMP_DEFAULT_ACCELEROMETER_CHOICE           0                                         /**< 0 */
-#define MPU6500_DMP_DEFAULT_ACCELEROMETER_LOW_PASS_FILTER  MPU6500_ACCELEROMETER_LOW_PASS_FILTER_3   /**< low pass filter 3 */
-#define MPU6500_DMP_DEFAULT_LOW_POWER_ACCEL_OUTPUT_RATE    MPU6500_LOW_POWER_ACCEL_OUTPUT_RATE_62P50 /**< 62.5Hz */
-#define MPU6500_DMP_DEFAULT_ACCELEROMETER_COMPARE          MPU6500_BOOL_TRUE                         /**< enable compare */
-#define MPU6500_DMP_DEFAULT_MAGNETOMETER_MODE              MPU6500_MAGNETOMETER_MODE_CONTINUOUS2     /**< 100Hz */
-#define MPU6500_DMP_DEFAULT_MAGNETOMETER_BITS              MPU6500_MAGNETOMETER_BITS_16              /**< 16bits */
-#define MPU6500_DMP_DEFAULT_IIC_CLOCK                      MPU6500_IIC_CLOCK_400_KHZ                 /**< 400KHz */
-#define MPU6500_DMP_DEFAULT_IIC_MULTI_MASTER               MPU6500_BOOL_TRUE                         /**< enable multi master */
-#define MPU6500_DMP_DEFAULT_IIC_WAIT_FOR_EXTERNAL_SENSOR   MPU6500_BOOL_FALSE                        /**< disable wait for external sensor */
-#define MPU6500_DMP_DEFAULT_IIC_READ_MODE                  MPU6500_IIC_READ_MODE_RESTART             /**< restart mode */
-#define MPU6500_DMP_DEFAULT_IIC_DELAY                      MPU6500_BOOL_FALSE                        /**< disable iic delay */
-
+#define MPU6500_DMP_DEFAULT_CLOCK_SOURCE MPU6500_CLOCK_SOURCE_PLL                                 /**< pll */
+#define MPU6500_DMP_DEFAULT_RATE 100                                                              /**< 50Hz */
+#define MPU6500_DMP_DEFAULT_ACCELEROMETER_RANGE MPU6500_ACCELEROMETER_RANGE_2G                    /**< 2g */
+#define MPU6500_DMP_DEFAULT_GYROSCOPE_RANGE MPU6500_GYROSCOPE_RANGE_2000DPS                       /**< 2000dps */
+#define MPU6500_DMP_DEFAULT_LOW_PASS_FILTER MPU6500_LOW_PASS_FILTER_3                             /**< low pass filter 3 */
+#define MPU6500_DMP_DEFAULT_CYCLE_WAKE_UP MPU6500_BOOL_FALSE                                      /**< disable cycle wake up */
+#define MPU6500_DMP_DEFAULT_INTERRUPT_PIN_LEVEL MPU6500_PIN_LEVEL_LOW                             /**< low level */
+#define MPU6500_DMP_DEFAULT_INTERRUPT_PIN_TYPE MPU6500_PIN_TYPE_OPEN_DRAIN                        /**< push pull */
+#define MPU6500_DMP_DEFAULT_INTERRUPT_MOTION MPU6500_BOOL_TRUE                                    /**< enable motion */
+#define MPU6500_DMP_DEFAULT_INTERRUPT_FIFO_OVERFLOW MPU6500_BOOL_FALSE                            /**< enable fifo overflow */
+#define MPU6500_DMP_DEFAULT_INTERRUPT_DMP MPU6500_BOOL_TRUE                                       /**< disable dmp */
+#define MPU6500_DMP_DEFAULT_INTERRUPT_FSYNC_INT MPU6500_BOOL_FALSE                                /**< disable fsync int */
+#define MPU6500_DMP_DEFAULT_INTERRUPT_DATA_READY MPU6500_BOOL_FALSE                               /**< disable data ready */
+#define MPU6500_DMP_DEFAULT_INTERRUPT_LATCH MPU6500_BOOL_TRUE                                     /**< enable latch */
+#define MPU6500_DMP_DEFAULT_INTERRUPT_READ_CLEAR MPU6500_BOOL_TRUE                                /**< enable interrupt read clear */
+#define MPU6500_DMP_DEFAULT_EXTERN_SYNC MPU6500_EXTERN_SYNC_INPUT_DISABLED                        /**< extern sync input disable */
+#define MPU6500_DMP_DEFAULT_FSYNC_INTERRUPT MPU6500_BOOL_FALSE                                    /**< disable fsync interrupt */
+#define MPU6500_DMP_DEFAULT_FSYNC_INTERRUPT_LEVEL MPU6500_PIN_LEVEL_LOW                           /**< low level */
+#define MPU6500_DMP_DEFAULT_IIC_MASTER MPU6500_BOOL_FALSE                                         /**< disable iic master */
+#define MPU6500_DMP_DEFAULT_IIC_BYPASS MPU6500_BOOL_FALSE                                         /**< disable iic bypass */
+#define MPU6500_DMP_DEFAULT_INTERRUPT_MODE MPU6500_DMP_INTERRUPT_MODE_CONTINUOUS                  /**< interrupt continuous mode */
+#define MPU6500_DMP_DEFAULT_MOTION_THRESHOLD 15                                                   /**< 200 mg */
+#define MPU6500_DMP_DEFAULT_GYROSCOPE_STANDBY MPU6500_BOOL_FALSE                                  /**< disable gyro standby */
+#define MPU6500_DMP_DEFAULT_FIFO_MODE MPU6500_FIFO_MODE_STREAM                                    /**< normal mode */
+#define MPU6500_DMP_DEFAULT_GYROSCOPE_CHOICE 0                                                    /**< 0 */
+#define MPU6500_DMP_DEFAULT_ACCELEROMETER_CHOICE 0                                                /**< 0 */
+#define MPU6500_DMP_DEFAULT_ACCELEROMETER_LOW_PASS_FILTER MPU6500_ACCELEROMETER_LOW_PASS_FILTER_3 /**< low pass filter 3 */
+#define MPU6500_DMP_DEFAULT_LOW_POWER_ACCEL_OUTPUT_RATE MPU6500_LOW_POWER_ACCEL_OUTPUT_RATE_62P50 /**< 62.5Hz */
+#define MPU6500_DMP_DEFAULT_ACCELEROMETER_COMPARE MPU6500_BOOL_TRUE                               /**< enable compare */
+#define MPU6500_DMP_DEFAULT_MAGNETOMETER_MODE MPU6500_MAGNETOMETER_MODE_CONTINUOUS2               /**< 100Hz */
+#define MPU6500_DMP_DEFAULT_MAGNETOMETER_BITS MPU6500_MAGNETOMETER_BITS_16                        /**< 16bits */
+#define MPU6500_DMP_DEFAULT_IIC_CLOCK MPU6500_IIC_CLOCK_400_KHZ                                   /**< 400KHz */
+#define MPU6500_DMP_DEFAULT_IIC_MULTI_MASTER MPU6500_BOOL_TRUE                                    /**< enable multi master */
+#define MPU6500_DMP_DEFAULT_IIC_WAIT_FOR_EXTERNAL_SENSOR MPU6500_BOOL_FALSE                       /**< disable wait for external sensor */
+#define MPU6500_DMP_DEFAULT_IIC_READ_MODE MPU6500_IIC_READ_MODE_RESTART                           /**< restart mode */
+#define MPU6500_DMP_DEFAULT_IIC_DELAY MPU6500_BOOL_FALSE                                          /**< disable iic delay */
 
     typedef struct motion_t
     {
@@ -107,7 +100,7 @@ extern "C"
         float roll[10];
         float yaw[10];
         uint16_t l;
-        bool MotionDetcted ;
+        bool MotionDetcted;
     } motion_t;
 
     /**
@@ -132,8 +125,7 @@ extern "C"
      * @note      none
      */
     uint8_t mpu6500_dmp_init(mpu6500_interface_t interface, mpu6500_address_t addr_pin,
-                             void (*receive_callback)(uint8_t type),
-                             void (*tap_callback)(uint8_t count, uint8_t direction));
+                             void (*receive_callback)(uint8_t type));
 
     /**
      * @brief  dmp example deinit
@@ -169,15 +161,7 @@ extern "C"
 
     uint8_t mpu6500_dmp_read_motion(motion_t *motionstruct);
 
-    /**
-     * @brief      dmp example get pedometer counter
-     * @param[out] *cnt pointer to a cnt buffer
-     * @return     status code
-     *             - 0 success
-     *             - 1 get pedometer counter failed
-     * @note       none
-     */
-    uint8_t mpu6500_dmp_get_pedometer_counter(uint32_t *cnt);
+    void mpu6500_dmp_resetFIFO();
 
     /**
      * @}

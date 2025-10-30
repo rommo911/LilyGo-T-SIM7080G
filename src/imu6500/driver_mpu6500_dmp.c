@@ -60,7 +60,6 @@ uint8_t mpu6500_dmp_irq_handler(void)
  * @param[in] interface used interface
  * @param[in] addr_pin iic device address
  * @param[in] *receive_callback pointer to a receive callback function
- * @param[in] *tap_callback pointer to a tap callback function
  * @param[in] *orient_callback pointer to an orient callback function
  * @return    status code
  *            - 0 success
@@ -68,8 +67,7 @@ uint8_t mpu6500_dmp_irq_handler(void)
  * @note      none
  */
 uint8_t mpu6500_dmp_init(mpu6500_interface_t interface, mpu6500_address_t addr_pin,
-                         void (*receive_callback)(uint8_t type),
-                         void (*tap_callback)(uint8_t count, uint8_t direction))
+                         void (*receive_callback)(uint8_t type))
 {
     uint8_t res;
     uint8_t reg;
@@ -875,4 +873,9 @@ uint8_t mpu6500_dmp_deinit(void)
     }
 
     return 0;
+}
+
+void mpu6500_dmp_resetFIFO()
+{
+    mpu6500_fifo_reset(&gs_handle);
 }

@@ -31,7 +31,6 @@ extern "C"
             //Serial.println("buffer NULL or len 0");
             return 1;
         }
-
         // driver uses 8-bit i2c address values (e.g. 0xD0), convert to 7-bit
         uint8_t dev = addr >> 1;
 
