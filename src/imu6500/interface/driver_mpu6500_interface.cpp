@@ -10,7 +10,6 @@
 
 extern "C"
 {
-
     uint8_t mpu6500_interface_iic_init(void)
     {
         // Initialize Wire1 with pins from pins.hpp. Use 400kHz if supported.
@@ -28,7 +27,7 @@ extern "C"
     {
         if (buf == NULL || len == 0)
         {
-            //Serial.println("buffer NULL or len 0");
+            // Serial.println("buffer NULL or len 0");
             return 1;
         }
         // driver uses 8-bit i2c address values (e.g. 0xD0), convert to 7-bit
@@ -114,15 +113,16 @@ extern "C"
     {
         delay((unsigned long)ms);
     }
+    char mpuPrintbuf[512];
 
     void mpu6500_interface_debug_print(const char *const fmt, ...)
     {
-        char buf[256];
+        memset(mpuPrintbuf, 0, sizeof(mpuPrintbuf));
         va_list args;
         va_start(args, fmt);
-        vsnprintf(buf, sizeof(buf), fmt, args);
+        vsnprintf(mpuPrintbuf, sizeof(mpuPrintbuf), fmt, args);
         va_end(args);
-        Serial.print(buf);
+        Serial.print(mpuPrintbuf);
     }
 
 } // extern "C"

@@ -67,7 +67,7 @@ uint8_t mpu6500_dmp_irq_handler(void)
  * @note      none
  */
 uint8_t mpu6500_dmp_init(mpu6500_interface_t interface, mpu6500_address_t addr_pin,
-                         void (*receive_callback)(uint8_t type))
+                         void (*receive_callback)(uint8_t type), float sensitivity, bool lowPower)
 {
     uint8_t res;
     uint8_t reg;
@@ -153,20 +153,6 @@ uint8_t mpu6500_dmp_init(mpu6500_interface_t interface, mpu6500_address_t addr_p
         return 1;
     }
 
-    /* if spi interface, disable iic interface */
-    if (interface == MPU6500_INTERFACE_SPI)
-    {
-        /* disable iic */
-        res = mpu6500_set_disable_iic_slave(&gs_handle, MPU6500_BOOL_TRUE);
-        if (res != 0)
-        {
-            mpu6500_interface_debug_print("mpu6500: set disable iic slave failed.\n");
-            (void)mpu6500_deinit(&gs_handle);
-
-            return 1;
-        }
-    }
-
     /* set fifo 1024kb */
     res = mpu6500_set_fifo_1024kb(&gs_handle);
     if (res != 0)
@@ -237,14 +223,28 @@ uint8_t mpu6500_dmp_init(mpu6500_interface_t interface, mpu6500_address_t addr_p
         return 1;
     }
 
-    /* set the default cycle wake up */
-    res = mpu6500_set_cycle_wake_up(&gs_handle, MPU6500_DMP_DEFAULT_CYCLE_WAKE_UP);
-    if (res != 0)
+    if (!lowPower)
     {
-        mpu6500_interface_debug_print("mpu6500: set cycle wake up failed.\n");
-        (void)mpu6500_deinit(&gs_handle);
+        /* set the default cycle wake up */
+        res = mpu6500_set_cycle_wake_up(&gs_handle, MPU6500_DMP_DEFAULT_CYCLE_WAKE_UP);
+        if (res != 0)
+        {
+            mpu6500_interface_debug_print("mpu6500: set cycle wake up failed.\n");
+            (void)mpu6500_deinit(&gs_handle);
 
-        return 1;
+            return 1;
+        }
+    }
+    else
+    {
+        res = mpu6500_set_cycle_wake_up(&gs_handle, MPU6500_DMP_DEFAULT_CYCLE_WAKE_UP_LOW_PWER);
+        if (res != 0)
+        {
+            mpu6500_interface_debug_print("mpu6500: set cycle wake up failed.\n");
+            (void)mpu6500_deinit(&gs_handle);
+
+            return 1;
+        }
     }
 
     /* enable acc x */
@@ -448,7 +448,7 @@ uint8_t mpu6500_dmp_init(mpu6500_interface_t interface, mpu6500_address_t addr_p
     }
 
     /* set the default motion threshold */
-    res = mpu6500_motion_threshold_convert_to_register(&gs_handle, MPU6500_DMP_DEFAULT_MOTION_THRESHOLD, &reg);
+    res = mpu6500_motion_threshold_convert_to_register(&gs_handle, sensitivity, &reg);
     if (res != 0)
     {
         mpu6500_interface_debug_print("mpu6500: motion threshold convert to register failed.\n");
@@ -456,15 +456,16 @@ uint8_t mpu6500_dmp_init(mpu6500_interface_t interface, mpu6500_address_t addr_p
 
         return 1;
     }
-
-    /* set the motion threshold */
-    res = mpu6500_set_motion_threshold(&gs_handle, reg);
-    if (res != 0)
+    else
     {
-        mpu6500_interface_debug_print("mpu6500: set motion threshold failed.\n");
-        (void)mpu6500_deinit(&gs_handle);
-
-        return 1;
+        /* set the motion threshold */
+        res = mpu6500_set_motion_threshold(&gs_handle, reg);
+        if (res != 0)
+        {
+            mpu6500_interface_debug_print("mpu6500: set motion threshold failed.\n");
+            (void)mpu6500_deinit(&gs_handle);
+            return 1;
+        }
     }
 
     /* enable wake on motion */
@@ -476,8 +477,17 @@ uint8_t mpu6500_dmp_init(mpu6500_interface_t interface, mpu6500_address_t addr_p
 
         return 1;
     }
+    /* set the default latch */
+    res = mpu6500_set_interrupt_latch(&gs_handle, MPU6500_DMP_DEFAULT_INTERRUPT_LATCH);
+    if (res != 0)
+    {
+        mpu6500_interface_debug_print("mpu6500: set interrupt latch failed.\n");
+        (void)mpu6500_deinit(&gs_handle);
 
+        return 1;
+    }
     /* set the default motion interrupt */
+
     res = mpu6500_set_interrupt(&gs_handle, MPU6500_INTERRUPT_MOTION, MPU6500_DMP_DEFAULT_INTERRUPT_MOTION);
     if (res != 0)
     {
@@ -486,52 +496,43 @@ uint8_t mpu6500_dmp_init(mpu6500_interface_t interface, mpu6500_address_t addr_p
 
         return 1;
     }
-
-    /* set the default fifo overflow interrupt */
-    res = mpu6500_set_interrupt(&gs_handle, MPU6500_INTERRUPT_FIFO_OVERFLOW, MPU6500_DMP_DEFAULT_INTERRUPT_FIFO_OVERFLOW);
-    if (res != 0)
+    if (!lowPower)
     {
-        mpu6500_interface_debug_print("mpu6500: set interrupt failed.\n");
-        (void)mpu6500_deinit(&gs_handle);
+        /* set the default fifo overflow interrupt */
+        res = mpu6500_set_interrupt(&gs_handle, MPU6500_INTERRUPT_FIFO_OVERFLOW, MPU6500_DMP_DEFAULT_INTERRUPT_FIFO_OVERFLOW);
+        if (res != 0)
+        {
+            mpu6500_interface_debug_print("mpu6500: set interrupt failed.\n");
+            (void)mpu6500_deinit(&gs_handle);
 
-        return 1;
+            return 1;
+        }
+
+        /* set the default dmp interrupt */
+        res = mpu6500_set_interrupt(&gs_handle, MPU6500_INTERRUPT_DMP, MPU6500_DMP_DEFAULT_INTERRUPT_DMP);
+        if (res != 0)
+        {
+            mpu6500_interface_debug_print("mpu6500: set interrupt failed.\n");
+            (void)mpu6500_deinit(&gs_handle);
+
+            return 1;
+        }
+
+        /* set the default data ready interrupt */
+        res = mpu6500_set_interrupt(&gs_handle, MPU6500_INTERRUPT_DATA_READY, MPU6500_DMP_DEFAULT_INTERRUPT_DATA_READY);
+        if (res != 0)
+        {
+            mpu6500_interface_debug_print("mpu6500: set interrupt failed.\n");
+            (void)mpu6500_deinit(&gs_handle);
+
+            return 1;
+        }
     }
-
-    /* set the default dmp interrupt */
-    res = mpu6500_set_interrupt(&gs_handle, MPU6500_INTERRUPT_DMP, MPU6500_DMP_DEFAULT_INTERRUPT_DMP);
-    if (res != 0)
-    {
-        mpu6500_interface_debug_print("mpu6500: set interrupt failed.\n");
-        (void)mpu6500_deinit(&gs_handle);
-
-        return 1;
-    }
-
     /* set the default fsync int interrupt */
     res = mpu6500_set_interrupt(&gs_handle, MPU6500_INTERRUPT_FSYNC_INT, MPU6500_DMP_DEFAULT_INTERRUPT_FSYNC_INT);
     if (res != 0)
     {
         mpu6500_interface_debug_print("mpu6500: set interrupt failed.\n");
-        (void)mpu6500_deinit(&gs_handle);
-
-        return 1;
-    }
-
-    /* set the default data ready interrupt */
-    res = mpu6500_set_interrupt(&gs_handle, MPU6500_INTERRUPT_DATA_READY, MPU6500_DMP_DEFAULT_INTERRUPT_DATA_READY);
-    if (res != 0)
-    {
-        mpu6500_interface_debug_print("mpu6500: set interrupt failed.\n");
-        (void)mpu6500_deinit(&gs_handle);
-
-        return 1;
-    }
-
-    /* set the default latch */
-    res = mpu6500_set_interrupt_latch(&gs_handle, MPU6500_DMP_DEFAULT_INTERRUPT_LATCH);
-    if (res != 0)
-    {
-        mpu6500_interface_debug_print("mpu6500: set interrupt latch failed.\n");
         (void)mpu6500_deinit(&gs_handle);
 
         return 1;
@@ -606,17 +607,18 @@ uint8_t mpu6500_dmp_init(mpu6500_interface_t interface, mpu6500_address_t addr_p
 
         return 1;
     }
-
-    /* set the default fifo mode */
-    res = mpu6500_set_fifo_mode(&gs_handle, MPU6500_DMP_DEFAULT_FIFO_MODE);
-    if (res != 0)
+    if (!lowPower)
     {
-        mpu6500_interface_debug_print("mpu6500: set fifo mode failed.\n");
-        (void)mpu6500_deinit(&gs_handle);
+        /* set the default fifo mode */
+        res = mpu6500_set_fifo_mode(&gs_handle, MPU6500_DMP_DEFAULT_FIFO_MODE);
+        if (res != 0)
+        {
+            mpu6500_interface_debug_print("mpu6500: set fifo mode failed.\n");
+            (void)mpu6500_deinit(&gs_handle);
 
-        return 1;
+            return 1;
+        }
     }
-
     /* set the default gyroscope choice */
     res = mpu6500_set_gyroscope_choice(&gs_handle, MPU6500_DMP_DEFAULT_GYROSCOPE_CHOICE);
     if (res != 0)
@@ -676,119 +678,120 @@ uint8_t mpu6500_dmp_init(mpu6500_interface_t interface, mpu6500_address_t addr_p
 
         return 1;
     }
-
-    /* dmp load firmware */
-    res = mpu6500_dmp_load_firmware(&gs_handle);
-    if (res != 0)
+    if (!lowPower)
     {
-        mpu6500_interface_debug_print("mpu6500: dmp load firmware failed.\n");
-        (void)mpu6500_deinit(&gs_handle);
+        /* dmp load firmware */
+        res = mpu6500_dmp_load_firmware(&gs_handle);
+        if (res != 0)
+        {
+            mpu6500_interface_debug_print("mpu6500: dmp load firmware failed.\n");
+            (void)mpu6500_deinit(&gs_handle);
 
-        return 1;
+            return 1;
+        }
+
+        /* set the default fifo rate */
+        res = mpu6500_dmp_set_fifo_rate(&gs_handle, MPU6500_DMP_DEFAULT_RATE);
+        if (res != 0)
+        {
+            mpu6500_interface_debug_print("mpu6500: dmp set fifo rate failed.\n");
+            (void)mpu6500_deinit(&gs_handle);
+
+            return 1;
+        }
+
+        /* set the default interrupt mode */
+        res = mpu6500_dmp_set_interrupt_mode(&gs_handle, MPU6500_DMP_DEFAULT_INTERRUPT_MODE);
+        if (res != 0)
+        {
+            mpu6500_interface_debug_print("mpu6500: dmp set interrupt mode failed.\n");
+            (void)mpu6500_deinit(&gs_handle);
+
+            return 1;
+        }
+
+        /* set the default dmp orientation */
+        res = mpu6500_dmp_set_orientation(&gs_handle, gyro_orientation);
+        if (res != 0)
+        {
+            mpu6500_interface_debug_print("mpu6500: dmp set orientation failed.\n");
+            (void)mpu6500_deinit(&gs_handle);
+
+            return 1;
+        }
+
+        /* enable feature */
+        res = mpu6500_dmp_set_feature(&gs_handle, MPU6500_DMP_FEATURE_6X_QUAT | MPU6500_DMP_FEATURE_TAP |
+                                                      MPU6500_DMP_FEATURE_SEND_RAW_ACCEL |
+                                                      MPU6500_DMP_FEATURE_SEND_CAL_GYRO | MPU6500_DMP_FEATURE_GYRO_CAL);
+        if (res != 0)
+        {
+            mpu6500_interface_debug_print("mpu6500: dmp set feature failed.\n");
+
+            (void)mpu6500_deinit(&gs_handle);
+
+            return 1;
+        }
+
+        res = mpu6500_dmp_set_6x_quaternion(&gs_handle, MPU6500_BOOL_TRUE);
+        if (res != 0)
+        {
+            mpu6500_interface_debug_print("mpu6500: mpu6500_dmp_set_3x_quaternion failed.\n");
+            (void)mpu6500_deinit(&gs_handle);
+            return 1;
+        }
+
+        /* dmp gyro accel raw offset convert */
+        res = mpu6500_dmp_gyro_accel_raw_offset_convert(&gs_handle, gyro_offset_raw, accel_offset_raw,
+                                                        gyro_offset, accel_offset);
+        if (res != 0)
+        {
+            mpu6500_interface_debug_print("mpu6500: dmp gyro accel raw offset convert failed.\n");
+            (void)mpu6500_deinit(&gs_handle);
+
+            return 1;
+        }
+
+        /* dmp set accel bias */
+        res = mpu6500_dmp_set_accel_bias(&gs_handle, accel_offset);
+        if (res != 0)
+        {
+            mpu6500_interface_debug_print("mpu6500: dmp set accel bias failed.\n");
+            (void)mpu6500_deinit(&gs_handle);
+
+            return 1;
+        }
+
+        /* dmp set gyro bias */
+        res = mpu6500_dmp_set_gyro_bias(&gs_handle, gyro_offset);
+        if (res != 0)
+        {
+            mpu6500_interface_debug_print("mpu6500: dmp set gyro bias failed.\n");
+            (void)mpu6500_deinit(&gs_handle);
+
+            return 1;
+        }
+
+        /* enable the dmp */
+        res = mpu6500_dmp_set_enable(&gs_handle, MPU6500_BOOL_TRUE);
+        if (res != 0)
+        {
+            mpu6500_interface_debug_print("mpu6500: dmp set enable failed.\n");
+            (void)mpu6500_deinit(&gs_handle);
+
+            return 1;
+        }
+
+        /* force fifo reset */
+        res = mpu6500_force_fifo_reset(&gs_handle);
+        if (res != 0)
+        {
+            mpu6500_interface_debug_print("mpu6500: force fifo reset failed.\n");
+            (void)mpu6500_deinit(&gs_handle);
+
+            return 1;
+        }
     }
-
-    /* set the default fifo rate */
-    res = mpu6500_dmp_set_fifo_rate(&gs_handle, MPU6500_DMP_DEFAULT_RATE);
-    if (res != 0)
-    {
-        mpu6500_interface_debug_print("mpu6500: dmp set fifo rate failed.\n");
-        (void)mpu6500_deinit(&gs_handle);
-
-        return 1;
-    }
-
-    /* set the default interrupt mode */
-    res = mpu6500_dmp_set_interrupt_mode(&gs_handle, MPU6500_DMP_DEFAULT_INTERRUPT_MODE);
-    if (res != 0)
-    {
-        mpu6500_interface_debug_print("mpu6500: dmp set interrupt mode failed.\n");
-        (void)mpu6500_deinit(&gs_handle);
-
-        return 1;
-    }
-
-    /* set the default dmp orientation */
-    res = mpu6500_dmp_set_orientation(&gs_handle, gyro_orientation);
-    if (res != 0)
-    {
-        mpu6500_interface_debug_print("mpu6500: dmp set orientation failed.\n");
-        (void)mpu6500_deinit(&gs_handle);
-
-        return 1;
-    }
-
-    /* enable feature */
-    res = mpu6500_dmp_set_feature(&gs_handle, MPU6500_DMP_FEATURE_6X_QUAT | MPU6500_DMP_FEATURE_TAP | MPU6500_DMP_FEATURE_PEDOMETER |
-                                                  MPU6500_DMP_FEATURE_ORIENT | MPU6500_DMP_FEATURE_SEND_RAW_ACCEL |
-                                                  MPU6500_DMP_FEATURE_SEND_CAL_GYRO | MPU6500_DMP_FEATURE_GYRO_CAL);
-    if (res != 0)
-    {
-        mpu6500_interface_debug_print("mpu6500: dmp set feature failed.\n");
-
-        (void)mpu6500_deinit(&gs_handle);
-
-        return 1;
-    }
-
-    res = mpu6500_dmp_set_6x_quaternion(&gs_handle, MPU6500_BOOL_TRUE);
-    if (res != 0)
-    {
-        mpu6500_interface_debug_print("mpu6500: mpu6500_dmp_set_3x_quaternion failed.\n");
-        (void)mpu6500_deinit(&gs_handle);
-        return 1;
-    }
-   
-    /* dmp gyro accel raw offset convert */
-    res = mpu6500_dmp_gyro_accel_raw_offset_convert(&gs_handle, gyro_offset_raw, accel_offset_raw,
-                                                    gyro_offset, accel_offset);
-    if (res != 0)
-    {
-        mpu6500_interface_debug_print("mpu6500: dmp gyro accel raw offset convert failed.\n");
-        (void)mpu6500_deinit(&gs_handle);
-
-        return 1;
-    }
-
-    /* dmp set accel bias */
-    res = mpu6500_dmp_set_accel_bias(&gs_handle, accel_offset);
-    if (res != 0)
-    {
-        mpu6500_interface_debug_print("mpu6500: dmp set accel bias failed.\n");
-        (void)mpu6500_deinit(&gs_handle);
-
-        return 1;
-    }
-
-    /* dmp set gyro bias */
-    res = mpu6500_dmp_set_gyro_bias(&gs_handle, gyro_offset);
-    if (res != 0)
-    {
-        mpu6500_interface_debug_print("mpu6500: dmp set gyro bias failed.\n");
-        (void)mpu6500_deinit(&gs_handle);
-
-        return 1;
-    }
-
-    /* enable the dmp */
-    res = mpu6500_dmp_set_enable(&gs_handle, MPU6500_BOOL_TRUE);
-    if (res != 0)
-    {
-        mpu6500_interface_debug_print("mpu6500: dmp set enable failed.\n");
-        (void)mpu6500_deinit(&gs_handle);
-
-        return 1;
-    }
-
-    /* force fifo reset */
-    res = mpu6500_force_fifo_reset(&gs_handle);
-    if (res != 0)
-    {
-        mpu6500_interface_debug_print("mpu6500: force fifo reset failed.\n");
-        (void)mpu6500_deinit(&gs_handle);
-
-        return 1;
-    }
-
     return 0;
 }
 
@@ -878,4 +881,19 @@ uint8_t mpu6500_dmp_deinit(void)
 void mpu6500_dmp_resetFIFO()
 {
     mpu6500_fifo_reset(&gs_handle);
+}
+
+uint8_t mpu6500_set_Motion_thresh(uint8_t thresh)
+{
+    uint8_t reg;
+    mpu6500_motion_threshold_convert_to_register(&gs_handle, thresh, &reg);
+    /* set the motion thresold */
+    uint8_t res = mpu6500_set_motion_threshold(&gs_handle, reg);
+    if (res != 0)
+    {
+        mpu6500_interface_debug_print("mpu6500: set motion threshold failed.\n");
+        //(void)mpu6500_deinit(&gs_handle);
+        return 1;
+    }
+    return 0;
 }

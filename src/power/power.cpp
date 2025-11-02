@@ -25,6 +25,8 @@ namespace power
     std::atomic<bool> isBatteryCriticalLevel;
     std::atomic<bool> isPekeyShortPressed;
 
+    uint64_t VbusInsertTimestamp = 0;
+
     void loopPower(void *arg);
 
     XPowersPMU PMU;
@@ -198,6 +200,7 @@ namespace power
         }
         }
         isVbusInserted = PMU.isVbusIn();
+
         isBatteryCriticalLevel = PMU.getBatteryPercent() <= 3;
         isBatteryLowLevel = PMU.getBatteryPercent() <= 8;
         return true;
@@ -209,6 +212,10 @@ namespace power
         while (1)
         {
             isVbusInserted = PMU.isVbusIn();
+            if (isVbusInserted)
+            {
+                VbusInsertTimestamp = millis();
+            }
             isBatteryCriticalLevel = (PMU.getBatteryPercent() <= 3U);
             isBatteryLowLevel = (PMU.getBatteryPercent() <= 8U);
             auto event = xEventGroupWaitBits(pmuIrqEvent, 0b01, pdTRUE, pdTRUE, pdMS_TO_TICKS(5000));
@@ -220,6 +227,7 @@ namespace power
                 {
                     mqttLogger.println("isVbusInsert");
                     isVbusInserted = true;
+                    VbusInsertTimestamp = millis();
                 }
                 if (PMU.isVbusRemoveIrq())
                 {
@@ -390,6 +398,11 @@ namespace power
         return PMU;
     }
 
+    uint64_t getLastVbusTs()
+    {
+        return VbusInsertTimestamp;
+    }
+
     bool isBattCharging()
     {
         return isCharging;
@@ -415,31 +428,23 @@ namespace power
         }
         return false;
     }
-
+#include "driver/rtc_io.h"
     void DeepSleepWith_IMU_PMU_Wake()
     {
         // Configure wakeup source: IMU interrupt pin
         fast_led::stop_led(0);
-        if (isVbusInserted)
-        {
-            mqttLogger.println("isVbusInserted skip deep sleep");
-            return;
-        }
         mqttLogger.println("Entering deep sleep mode with IMU and PMU wakeup");
         detachInterrupt(PMU_INPUT_PIN);
         detachInterrupt(MOTION_INTRRUPT_PIN);
         modem::shutdownModem();
         sdcard::shutdownSdcard();
+        rtc_gpio_hold_en(MOTION_INTRRUPT_PIN);
+        rtc_gpio_hold_en(PMU_INPUT_PIN_);
         uint64_t wakeup_mask = (1ULL << MOTION_INTRRUPT_PIN) | (1ULL << PMU_INPUT_PIN);
         Serial.println("Going to sleep now with mask " + String(wakeup_mask, BIN) + "...");
         ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup_io(wakeup_mask, ESP_EXT1_WAKEUP_ANY_LOW));
-        delay(100);
-        fast_led::set_solid(0, {5, 5, 0}); // turn off led before sleep
-        do
-        {
-            delay(100); // wait for car start to be released
-        } while (isVbusInserted);
-
+        fast_led::set_solid(0, {10, 10, 0}); // turn off led before sleep
+        delay(250);
         esp_deep_sleep_start();
     }
 

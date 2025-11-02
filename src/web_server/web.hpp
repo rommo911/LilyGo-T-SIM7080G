@@ -10,13 +10,9 @@
 
 namespace fs
 {
-    enum class FServerSource
-    {
-        LittleFS,
-        SDcard
-    };
+
     FSWebServer &GetmyWebServer();
-    bool fs_server_setup(FServerSource source = FServerSource::LittleFS);
+    bool fs_server_setup();
 
     static const String style =
         "<style>#file-input,input{width:100%;height:44px;border-radius:4px;margin:10px auto;font-size:15px}"
@@ -57,6 +53,58 @@ namespace fs
         "</script>" +
         style;
 
+        /* WiFi and MQTT Settings Page */
+        static const String wifiSettingsPage =
+            "<form name=wifiForm>"
+            "<h1>WiFi & MQTT Settings</h1>"
+            "<h3>STA (Client) WiFi</h3>"
+            "<input id=ssid name=ssid placeholder='WiFi SSID' />"
+            "<input id=pass name=pass placeholder='WiFi Password' type=password />"
+            "<h3>Access Point (AP)</h3>"
+            "<input id=ap_ssid name=ap_ssid placeholder='AP SSID' />"
+            "<input id=ap_pass name=ap_pass placeholder='AP Password' type=password />"
+            "<h3>MQTT</h3>"
+            "<input id=mqtt_server name=mqtt_server placeholder='MQTT Server' />"
+            "<input id=mqtt_port name=mqtt_port placeholder='MQTT Port' type=number />"
+            "<input id=mqtt_user name=mqtt_user placeholder='MQTT User' />"
+            "<input id=mqtt_pass name=mqtt_pass placeholder='MQTT Password' type=password />"
+            "<input id=mqtt_topic name=mqtt_topic placeholder='MQTT Topic' />"
+            "<input id=mqtt_cmd_topic name=mqtt_cmd_topic placeholder='MQTT Cmd Topic' />"
+            "<br><br><input type=button class=btn value='Save WiFi Settings' onclick='saveWifi()'>"
+            "<script>"
+            "function saveWifi(){"
+            "  const payload = {"
+            "    ssid: document.getElementById('ssid').value || '',"
+            "    pass: document.getElementById('pass').value || '',"
+            "    ap_ssid: document.getElementById('ap_ssid').value || '',"
+            "    ap_pass: document.getElementById('ap_pass').value || '',"
+            "    mqtt_server: document.getElementById('mqtt_server').value || '',"
+            "    mqtt_port: parseInt(document.getElementById('mqtt_port').value) || 0," 
+            "    mqtt_user: document.getElementById('mqtt_user').value || '',"
+            "    mqtt_pass: document.getElementById('mqtt_pass').value || '',"
+            "    mqtt_topic: document.getElementById('mqtt_topic').value || '',"
+            "    mqtt_cmd_topic: document.getElementById('mqtt_cmd_topic').value || ''"
+            "  };"
+            "  fetch('/setWifiSettings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})"
+            "    .then(r=>{ if (r.ok) alert('WiFi settings saved'); else alert('Failed to save WiFi settings'); });"
+            "}"
+            "function loadWifi(){"
+            "  fetch('/getWifiSettings').then(r=>r.json()).then(d=>{"
+            "    document.getElementById('ssid').value = d.ssid || '';"
+            "    document.getElementById('pass').value = d.pass || '';"
+            "    document.getElementById('ap_ssid').value = d.ap_ssid || '';"
+            "    document.getElementById('ap_pass').value = d.ap_pass || '';"
+            "    document.getElementById('mqtt_server').value = d.mqtt_server || '';"
+            "    document.getElementById('mqtt_port').value = d.mqtt_port || '';"
+            "    document.getElementById('mqtt_user').value = d.mqtt_user || '';"
+            "    document.getElementById('mqtt_pass').value = d.mqtt_pass || '';"
+            "    document.getElementById('mqtt_topic').value = d.mqtt_topic || '';"
+            "    document.getElementById('mqtt_cmd_topic').value = d.mqtt_cmd_topic || '';"
+            "  }).catch(()=>{});"
+            "}"
+            "document.addEventListener('DOMContentLoaded', loadWifi);"
+            "</script>" +
+            style;
     /* Server Index Page */
     static const String CarserverIndex =
         "<script src='https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js'></script>"
@@ -68,6 +116,10 @@ namespace fs
         "<button class=btn onclick=\"window.location.href='/bleUUID'\">Set BLE iBeacon UUID</button>"
         "<br><br>"
         "<button class=btn onclick=\"window.location.href='/changeCredentials'\">Change Credentials</button>"
+        "<br><br>"
+        "<button class=btn onclick=\"window.location.href='/imuThresholds'\">IMU Calibration</button>"
+        "<br><br>"
+        "<button class=btn onclick=\"window.location.href='/wifiSettings'\">WiFi / MQTT Settings</button>"
         "<script>"
         "function sub(obj){"
         "var fileName = obj.value.split('\\\\');"
@@ -179,6 +231,67 @@ namespace fs
         "  if (uuid) {"
         "    document.getElementById('uuid').value = uuid;"
         "  }"
+        "});"
+        "</script>" +
+        style;
+
+    /* IMU Thresholds Page */
+    static const String imuThresholdsPage =
+        "<form name=imuForm>"
+        "<h1>IMU Calibration - Motion Thresholds</h1>"
+        "<p>Linear accel thresholds (g):</p>"
+        "<label>GX <span id=val_gx></span></label>"
+        "<input id=gx type=range min=0.003 max=0.01 step=0.0001 value=0.005 />"
+        "<label>GY <span id=val_gy></span></label>"
+        "<input id=gy type=range min=0.003 max=0.01 step=0.0001 value=0.005 />"
+        "<label>GZ <span id=val_gz></span></label>"
+        "<input id=gz type=range min=0.003 max=0.01 step=0.0001 value=0.005 />"
+        "<p>Rotation thresholds (deg):</p>"
+        "<label>ROLL <span id=val_roll></span></label>"
+        "<input id=roll type=range min=0.2 max=1.5 step=0.01 value=0.5 />"
+        "<label>YAW <span id=val_yaw></span></label>"
+        "<input id=yaw type=range min=0.2 max=1.5 step=0.01 value=0.5 />"
+        "<label>PITCH <span id=val_pitch></span></label>"
+        "<input id=pitch type=range min=0.2 max=1.5 step=0.01 value=0.5 />"
+        "<p>Wake-on-motion threshold:</p>"
+        "<label>WOM <span id=val_wom></span></label>"
+        "<input id=wom type=range min=5 max=50 step=1 value=15 />"
+        "<br><br><input type=button class=btn value='Save IMU Thresholds' onclick='saveIMU()'>"
+        "<script>"
+        "function updateValues() {"
+        "  document.getElementById('val_gx').innerText = Number(document.getElementById('gx').value).toFixed(4);"
+        "  document.getElementById('val_gy').innerText = Number(document.getElementById('gy').value).toFixed(4);"
+        "  document.getElementById('val_gz').innerText = Number(document.getElementById('gz').value).toFixed(4);"
+        "  document.getElementById('val_roll').innerText = Number(document.getElementById('roll').value).toFixed(2);"
+        "  document.getElementById('val_yaw').innerText = Number(document.getElementById('yaw').value).toFixed(2);"
+        "  document.getElementById('val_pitch').innerText = Number(document.getElementById('pitch').value).toFixed(2);"
+        "  document.getElementById('val_wom').innerText = Number(document.getElementById('wom').value);"
+        "}"
+        "function saveIMU() {"
+        "  const payload = {"
+        "    MOTION_THRESHOLD_GX: parseFloat(document.getElementById('gx').value),"
+        "    MOTION_THRESHOLD_GY: parseFloat(document.getElementById('gy').value),"
+        "    MOTION_THRESHOLD_GZ: parseFloat(document.getElementById('gz').value),"
+        "    MOTION_THRESHOLD_ROLL: parseFloat(document.getElementById('roll').value),"
+        "    MOTION_THRESHOLD_YAW: parseFloat(document.getElementById('yaw').value),"
+        "    MOTION_THRESHOLD_PITCH: parseFloat(document.getElementById('pitch').value),"
+        "    WOM_DET_THRESH: parseInt(document.getElementById('wom').value)"
+        "  };"
+        "  fetch('/setImuThresholds',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})"
+        "    .then(r=>{ if (r.ok) alert('IMU thresholds saved'); else alert('Failed to save IMU thresholds'); });"
+        "}"
+        "document.addEventListener('DOMContentLoaded', () => {"
+        "  fetch('/getImuThresholds').then(r=>r.json()).then(d=>{"
+        "    document.getElementById('gx').value = d.MOTION_THRESHOLD_GX;"
+        "    document.getElementById('gy').value = d.MOTION_THRESHOLD_GY;"
+        "    document.getElementById('gz').value = d.MOTION_THRESHOLD_GZ;"
+        "    document.getElementById('roll').value = d.MOTION_THRESHOLD_ROLL;"
+        "    document.getElementById('yaw').value = d.MOTION_THRESHOLD_YAW;"
+        "    document.getElementById('pitch').value = d.MOTION_THRESHOLD_PITCH;"
+        "    document.getElementById('wom').value = d.WOM_DET_THRESH;"
+        "    updateValues();"
+        "  }).catch(()=>updateValues());"
+        "  ['gx','gy','gz','roll','yaw','pitch','wom'].forEach(id=>document.getElementById(id).addEventListener('input',updateValues));"
         "});"
         "</script>" +
         style;

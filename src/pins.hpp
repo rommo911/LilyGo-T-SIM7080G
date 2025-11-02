@@ -7,6 +7,7 @@ const gpio_num_t I2C_SDA_PIN = GPIO_NUM_9; //
 const gpio_num_t I2C_SCL_PIN = GPIO_NUM_10; //
 const gpio_num_t MOTION_INTRRUPT_PIN = GPIO_NUM_11; //
 const gpio_num_t PIXEL_LED_PIN = GPIO_NUM_13;
+const gpio_num_t PMU_INPUT_PIN_ = GPIO_NUM_6;
 
 #define PWDN_GPIO_NUM               (-1)
 #define RESET_GPIO_NUM              (18)

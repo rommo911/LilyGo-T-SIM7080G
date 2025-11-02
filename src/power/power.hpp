@@ -20,6 +20,8 @@ namespace power
     };
     bool setupPower();
     esp_sleep_wakeup_cause_t getWakeupReason();
+    WakeUpReason Get_wake_reason();
+
     XPowersPMU &getPMU();
     bool isBattCharging();
     bool isPowerVBUSOn();
@@ -28,5 +30,6 @@ namespace power
     bool iskeyShortPressed();
     void DeepSleepWith_IMU_PMU_Wake();
     void DeepSleepWith_PMU_Wake();
+    uint64_t getLastVbusTs();
 
 };

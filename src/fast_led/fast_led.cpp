@@ -166,7 +166,6 @@ namespace fast_led
             leds[i] = CRGB::Black;
         FastLED.show();
         xTaskCreate(loop_fast_led, "fast_led_worker", 4096, NULL, 1, &workerTask);
-        delay(10);
     }
     // New separated implementations
     void set_solid(uint8_t index, CRGB color)
@@ -197,18 +196,20 @@ namespace fast_led
         if (!valid_index(index))
             return;
         std::lock_guard<std::mutex> lk(fast_led_mtx);
+        fast_led::LedState newstate;
+        newstate.mode = LedMode::Blink;
+        newstate.color = color;
+        newstate.to_color = tocolor;
+        newstate.on_time_ms = (on_time_ms == 0) ? 1 : on_time_ms;
+        newstate.off_time_ms = (off_time_ms == 0) ? 1 : off_time_ms;
+        newstate.duration_ms = -1;
+        newstate.start_time = millis();
+        newstate.last_toggle = 0;
+        newstate.blink_on = false; // worker will switch on first tick
+        newstate.active = true;
+        newstate.timeout_ms = (timeout_s > 0) ? (timeout_s * 1000) : -1;
         auto &s = states[index];
-        s.mode = LedMode::Blink;
-        s.color = color;
-        s.to_color = tocolor;
-        s.on_time_ms = (on_time_ms == 0) ? 1 : on_time_ms;
-        s.off_time_ms = (off_time_ms == 0) ? 1 : off_time_ms;
-        s.duration_ms = -1;
-        s.start_time = millis();
-        s.last_toggle = 0;
-        s.blink_on = false; // worker will switch on first tick
-        s.active = true;
-        s.timeout_ms = (timeout_s > 0) ? (timeout_s * 1000) : -1;
+        s = newstate;
     }
 
     void start_fade(uint8_t index,

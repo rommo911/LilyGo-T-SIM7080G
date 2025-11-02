@@ -9,12 +9,18 @@
 #include "sdcard/sdcard.h"
 #include "wifi/wifi.hpp"
 #include "SD_MMC.h"
+#include "imu6500/imu_DMP6.hpp"
 
 namespace fs
 {
+  enum class FServerSource
+  {
+    LittleFS,
+    SDcard
+  };
   static FSWebServer myWebServer(LittleFS, 80, "CarFsServer");
   static FSWebServer myWebServerSDMMC(SD_MMC, 80, "CarSDServer");
-  static FServerSource FSsource = FServerSource::LittleFS;
+  static FServerSource FSsource = FServerSource::SDcard;
   static void getSdcardInfo(fsInfo_t *fsInfo)
   {
     fsInfo->fsName = "SDCard";
@@ -141,6 +147,196 @@ namespace fs
     GetmyWebServer().send(200, "text/html", bleUUIDPage);
   }
 
+  static void handleImuThresholds()
+  {
+    if (!GetmyWebServer().authenticate_internal())
+    {
+      Serial.println("Authentication failed, redirecting to login page.");
+      return GetmyWebServer().requestAuthentication();
+    }
+    GetmyWebServer().sendHeader("Connection", "close");
+    GetmyWebServer().send(200, "text/html", imuThresholdsPage);
+  }
+
+  static void handleWifiSettings()
+  {
+    if (!GetmyWebServer().authenticate_internal())
+    {
+      Serial.println("Authentication failed, redirecting to login page.");
+      return GetmyWebServer().requestAuthentication();
+    }
+    GetmyWebServer().sendHeader("Connection", "close");
+    GetmyWebServer().send(200, "text/html", wifiSettingsPage);
+  }
+
+  static void handleGetWifiSettings()
+  {
+    if (!GetmyWebServer().authenticate_internal())
+    {
+      Serial.println("Authentication failed, redirecting to login page.");
+      return GetmyWebServer().requestAuthentication();
+    }
+    Preferences pref;
+    pref.begin("wifi", true);
+    String ssid = pref.getString("ssid", "");
+    String pass = pref.getString("pass", "");
+    String ap_ssid = pref.getString("ap_ssid", "");
+    String ap_pass = pref.getString("ap_pass", "");
+    String mqtt_server = pref.getString("mqtt_server", "");
+    uint32_t mqtt_port = pref.getUInt("mqtt_port", 0);
+    String mqtt_user = pref.getString("mqtt_user", "");
+    String mqtt_pass = pref.getString("mqtt_pass", "");
+    String mqtt_topic = pref.getString("mqtt_topic", "");
+    String mqtt_cmd_topic = pref.getString("mqtt_cmd_topic", "");
+    pref.end();
+
+    String json = "{";
+    json += "\"ssid\":\"" + ssid + "\",";
+    json += "\"pass\":\"" + pass + "\",";
+    json += "\"ap_ssid\":\"" + ap_ssid + "\",";
+    json += "\"ap_pass\":\"" + ap_pass + "\",";
+    json += "\"mqtt_server\":\"" + mqtt_server + "\",";
+    json += "\"mqtt_port\":" + String(mqtt_port) + ",";
+    json += "\"mqtt_user\":\"" + mqtt_user + "\",";
+    json += "\"mqtt_pass\":\"" + mqtt_pass + "\",";
+    json += "\"mqtt_topic\":\"" + mqtt_topic + "\",";
+    json += "\"mqtt_cmd_topic\":\"" + mqtt_cmd_topic + "\"";
+    json += "}";
+
+    GetmyWebServer().send(200, "application/json", json);
+  }
+
+  static void handleSetWifiSettings()
+  {
+    if (!GetmyWebServer().authenticate_internal())
+    {
+      Serial.println("Authentication failed, redirecting to login page.");
+      return GetmyWebServer().requestAuthentication();
+    }
+    if (GetmyWebServer().hasArg("plain"))
+    {
+      String body = GetmyWebServer().arg("plain");
+      JsonDocument doc;
+      DeserializationError err = deserializeJson(doc, body);
+      if (err)
+      {
+        Serial.println("Failed to parse JSON for WiFi settings");
+        GetmyWebServer().send(400, "text/html", generateSuccessPage("Invalid JSON format"));
+        return;
+      }
+      Preferences pref;
+      pref.begin("wifi", false);
+      if (doc["ssis"].is<String>())
+        pref.putString("ssid", String((const char *)doc["ssid"]));
+      if (doc["pass"].is<String>())
+        pref.putString("pass", String((const char *)doc["pass"]));
+      if (doc["ap_ssid"].is<String>())
+        pref.putString("ap_ssid", String((const char *)doc["ap_ssid"]));
+      if (doc["ap_pass"].is<String>())
+        pref.putString("ap_pass", String((const char *)doc["ap_pass"]));
+      if (doc["mqtt_server"].is<String>())
+        pref.putString("mqtt_server", String((const char *)doc["mqtt_server"]));
+      if (doc["mqtt_port"].is<String>())
+        pref.putUInt("mqtt_port", (uint32_t)doc["mqtt_port"]);
+      if (doc["mqtt_user"].is<String>())
+        pref.putString("mqtt_user", String((const char *)doc["mqtt_user"]));
+      if (doc["mqtt_pass"].is<String>())
+        pref.putString("mqtt_pass", String((const char *)doc["mqtt_pass"]));
+      if (doc["mqtt_topic"].is<String>())
+        pref.putString("mqtt_topic", String((const char *)doc["mqtt_topic"]));
+      if (doc["mqtt_cmd_topic"].is<String>())
+        pref.putString("mqtt_cmd_topic", String((const char *)doc["mqtt_cmd_topic"]));
+      pref.end();
+
+      Serial.println("WiFi settings saved to NVS");
+      GetmyWebServer().send(200, "text/html", generateSuccessPage("WiFi settings saved successfully!"));
+    }
+    else
+    {
+      GetmyWebServer().send(400, "text/html", generateSuccessPage("No data received"));
+    }
+  }
+
+  static void handleGetImuThresholds()
+  {
+    if (!GetmyWebServer().authenticate_internal())
+    {
+      Serial.println("Authentication failed, redirecting to login page.");
+      return GetmyWebServer().requestAuthentication();
+    }
+    Preferences imuPref;
+    imuPref.begin("imu", true);
+    float gx = imuPref.getFloat("M_TH_GX", 0.005f);
+    float gy = imuPref.getFloat("M_TH_GY", 0.005f);
+    float gz = imuPref.getFloat("M_TH_GZ", 0.005f);
+    float roll = imuPref.getFloat("M_TH_ROLL", 0.5f);
+    float yaw = imuPref.getFloat("M_TH_YAW", 0.5f);
+    float pitch = imuPref.getFloat("M_TH_PITCH", 0.5f);
+    int wom = imuPref.getInt("WOM_THR", 15);
+    imuPref.end();
+
+    String jsonResponse = "{";
+    jsonResponse += "\"M_TH_GX\":" + String(gx, 6) + ",";
+    jsonResponse += "\"M_TH_GY\":" + String(gy, 6) + ",";
+    jsonResponse += "\"M_TH_GZ\":" + String(gz, 6) + ",";
+    jsonResponse += "\"M_TH_ROLL\":" + String(roll, 4) + ",";
+    jsonResponse += "\"M_TH_YAW\":" + String(yaw, 4) + ",";
+    jsonResponse += "\"M_TH_PITCH\":" + String(pitch, 4) + ",";
+    jsonResponse += "\"WOM_DET_THRESH\":" + String(wom);
+    jsonResponse += "}";
+
+    GetmyWebServer().send(200, "application/json", jsonResponse);
+  }
+
+  static void handleSetImuThresholds()
+  {
+    if (!GetmyWebServer().authenticate_internal())
+    {
+      Serial.println("Authentication failed, redirecting to login page.");
+      return GetmyWebServer().requestAuthentication();
+    }
+    if (GetmyWebServer().hasArg("plain"))
+    {
+      String body = GetmyWebServer().arg("plain");
+      JsonDocument doc;
+      DeserializationError error = deserializeJson(doc, body);
+      if (error)
+      {
+        Serial.println("Failed to parse JSON for IMU thresholds");
+        GetmyWebServer().send(400, "text/html", generateSuccessPage("Invalid JSON format"));
+        return;
+      }
+      Preferences imuPref;
+      imuPref.begin("imu", false);
+      if (doc["M_TH_GX"].is<String>())
+        imuPref.putFloat("M_TH_GX", (float)doc["M_TH_GX"]);
+      if (doc["M_TH_GY"].is<String>())
+        imuPref.putFloat("M_TH_GY", (float)doc["M_TH_GY"]);
+      if (doc["M_TH_GZ"].is<String>())
+        imuPref.putFloat("M_TH_GZ", (float)doc["M_TH_GZ"]);
+      if (doc["M_TH_ROLL"].is<String>())
+        imuPref.putFloat("M_TH_ROLL", (float)doc["M_TH_ROLL"]);
+      if (doc["M_TH_YAW"].is<String>())
+        imuPref.putFloat("M_TH_YAW", (float)doc["M_TH_YAW"]);
+      if (doc["M_TH_PITCH"].is<String>())
+        imuPref.putFloat("M_TH_PITCH", (float)doc["M_TH_PITCH"]);
+      imuPref.end();
+      if (doc["WOM_DET_THRESH"].is<int>())
+      {
+        int wom = doc["WOM_DET_THRESH"];
+        // update live IMU wake-on-motion threshold
+        imu6500_dmp::SetWakeOnMotionThresh((uint8_t)wom);
+      }
+
+      Serial.println("IMU thresholds saved to NVS");
+      GetmyWebServer().send(200, "text/html", generateSuccessPage("IMU thresholds saved successfully!"));
+    }
+    else
+    {
+      GetmyWebServer().send(400, "text/html", generateSuccessPage("No data received"));
+    }
+  }
+
   static void handleSetUUID()
   {
     if (!GetmyWebServer().authenticate_internal())
@@ -264,25 +460,25 @@ namespace fs
   }
   static const unsigned long loginTimeout = 5 * 60 * 1000; // 5 minutes in milliseconds
 
-  bool fs_server_setup(FServerSource source)
+  bool fs_server_setup()
   {
     // FILESYSTEM INIT
-    FSsource = source;
+    FSsource = FServerSource::SDcard;
     Serial.println("Initializing FS...");
-    if (FSsource == FServerSource::SDcard)
-    {
-      Serial.println("Using SD Card as filesystem for web server.");
-      if (sdcard::setupSdcard() == false)
-        return false;
-    }
-    else
 
+    if (sdcard::setupSdcard() == false)
     {
+      FSsource == FServerSource::LittleFS;
+      Serial.println("Using littlefs as filesystem for web server.");
       if (!LittleFS.begin(false, "/littlefs", 10))
       {
         Serial.println("ERROR on mounting filesystem.");
         return false;
       }
+    }
+    else
+    {
+      Serial.println("Using SD Card as filesystem for web server.");
     }
     auto &myServer = GetmyWebServer();
     myServer.enableFsCodeEditor(getFsInfo);
@@ -318,7 +514,15 @@ namespace fs
     /* Get Current Time */
     myServer.on("/getCurrentTime", HTTP_GET, handleGetCurrentTime);
     myServer.on("/getCurrentUUID", HTTP_GET, handleGetCurrentUUID);
-    
+    /* IMU Thresholds Pages */
+    myServer.on("/imuThresholds", HTTP_GET, handleImuThresholds);
+    myServer.on("/getImuThresholds", HTTP_GET, handleGetImuThresholds);
+    myServer.on("/setImuThresholds", HTTP_POST, handleSetImuThresholds);
+    /* WiFi Settings Pages */
+    myServer.on("/wifiSettings", HTTP_GET, handleWifiSettings);
+    myServer.on("/getWifiSettings", HTTP_GET, handleGetWifiSettings);
+    myServer.on("/setWifiSettings", HTTP_POST, handleSetWifiSettings);
+
     myServer.begin();
     return true;
   }
