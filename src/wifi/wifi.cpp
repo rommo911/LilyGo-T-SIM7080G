@@ -198,7 +198,7 @@ void setUpWifiOTA(void *arg)
     mqttLogger.println("WiFi STA setup complete ");
     mqttLogger.println("OTA Ready");
     String IP = String("IP address:") + WiFi.localIP().toString();
-    xTaskCreate(loopWifiStation, "WiFiSTA", 8192, NULL, 5, &WifiTaskHandle);
+    xTaskCreate(loopWifiStation, "WiFiSTA", 10000, NULL, 2, &WifiTaskHandle);
     mqttLogger.println("WiFi STA end setup ");
   }
   else
@@ -206,7 +206,7 @@ void setUpWifiOTA(void *arg)
     mqttLogger.println("WiFi STA setup failed ");
     mqttLogger.println("WiFi AP setup starting ");
     setUpWifiAP();
-    xTaskCreate(loopWifiAP, "WiFiAP", 8192, NULL, 5, &WifiTaskHandle);
+    xTaskCreate(loopWifiAP, "WiFiAP", 10000, NULL, 2, &WifiTaskHandle);
     mqttLogger.println("WiFi AP task ending ");
   }
 }

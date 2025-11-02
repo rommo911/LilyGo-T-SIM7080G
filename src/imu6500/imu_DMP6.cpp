@@ -150,7 +150,7 @@ namespace imu6500_dmp
     }
     Preferences imuPref;
     imuPref.begin("imu");
-    WOM_DET_THRESH = imuPref.getFloat("WOM_DET_THRESH", WOM_DET_THRESH);
+    WOM_DET_THRESH = imuPref.getFloat("WOM_THR", WOM_DET_THRESH);
     imuPref.end();
     Serial.println(F("starting MPU6050 connection..."));
     if (mpu6500_dmp_init(MPU6500_INTERFACE_IIC,
@@ -324,7 +324,7 @@ namespace imu6500_dmp
     delay(15000);
     while (imu_dmp_loop)
     {
-      if (((millis()) > (MPU_MTION_Interrupt_ts + 15000)) && ((millis()) > (last_baseline_reset + 15000)) && (motionAfterBaselineCounter > 20))
+      if (((millis()) > (MPU_MTION_Interrupt_ts + 1500)) && ((millis()) > (last_baseline_reset + 15000)) && (motionAfterBaselineCounter > 30))
       {
         Serial.println("Periodic baseline calibration");
         resetBaseline();
@@ -429,6 +429,11 @@ namespace imu6500_dmp
         if (globalMotion)
         {
           motionAfterBaselineCounter++;
+          delay(50);
+        }
+        else 
+        {
+          motionAfterBaselineCounter = 0;
         }
         /*Serial.printf(" ax=%.4f, ay=%.4f, az=%.4f, yaw=%.4f, pit=%.4f, rol=%.4f ",
                       globalmotiondata.accel_g[0][0], globalmotiondata.accel_g[0][1], globalmotiondata.accel_g[0][2],
@@ -481,15 +486,12 @@ namespace imu6500_dmp
 
   bool SetWakeOnMotionThresh(uint8_t motion_thresh_mg)
   {
-    Preferences imuPref;
-    imuPref.begin("imu");
-    imuPref.putFloat("WOM_DET_THRESH", motion_thresh_mg);
-    imuPref.end();
     bool ret = false;
     auto res = xSemaphoreTake(wireMutex, pdMS_TO_TICKS(100));
     if (res == pdTRUE)
     {
       ret = (mpu6500_set_Motion_thresh(motion_thresh_mg) == 0);
+      Serial.println("wom updated in MPU ");
       xSemaphoreGive(wireMutex);
     }
     return ret;

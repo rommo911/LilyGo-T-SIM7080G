@@ -276,13 +276,13 @@ namespace fs
     imuPref.end();
 
     String jsonResponse = "{";
-    jsonResponse += "\"M_TH_GX\":" + String(gx, 6) + ",";
-    jsonResponse += "\"M_TH_GY\":" + String(gy, 6) + ",";
-    jsonResponse += "\"M_TH_GZ\":" + String(gz, 6) + ",";
-    jsonResponse += "\"M_TH_ROLL\":" + String(roll, 4) + ",";
-    jsonResponse += "\"M_TH_YAW\":" + String(yaw, 4) + ",";
-    jsonResponse += "\"M_TH_PITCH\":" + String(pitch, 4) + ",";
-    jsonResponse += "\"WOM_DET_THRESH\":" + String(wom);
+    jsonResponse += "\"M_TH_GX\":" + String(gx, 4) + ",";
+    jsonResponse += "\"M_TH_GY\":" + String(gy, 4) + ",";
+    jsonResponse += "\"M_TH_GZ\":" + String(gz, 4) + ",";
+    jsonResponse += "\"M_TH_ROLL\":" + String(roll, 2) + ",";
+    jsonResponse += "\"M_TH_YAW\":" + String(yaw, 2) + ",";
+    jsonResponse += "\"M_TH_PITCH\":" + String(pitch, 2) + ",";
+    jsonResponse += "\"WOM_THR\":" + String(wom);
     jsonResponse += "}";
 
     GetmyWebServer().send(200, "application/json", jsonResponse);
@@ -308,26 +308,27 @@ namespace fs
       }
       Preferences imuPref;
       imuPref.begin("imu", false);
-      if (doc["M_TH_GX"].is<String>())
+      if (doc["M_TH_GX"].is<float>())
         imuPref.putFloat("M_TH_GX", (float)doc["M_TH_GX"]);
-      if (doc["M_TH_GY"].is<String>())
+      if (doc["M_TH_GY"].is<float>())
         imuPref.putFloat("M_TH_GY", (float)doc["M_TH_GY"]);
-      if (doc["M_TH_GZ"].is<String>())
+      if (doc["M_TH_GZ"].is<float>())
         imuPref.putFloat("M_TH_GZ", (float)doc["M_TH_GZ"]);
-      if (doc["M_TH_ROLL"].is<String>())
+      if (doc["M_TH_ROLL"].is<float>())
         imuPref.putFloat("M_TH_ROLL", (float)doc["M_TH_ROLL"]);
-      if (doc["M_TH_YAW"].is<String>())
+      if (doc["M_TH_YAW"].is<float>())
         imuPref.putFloat("M_TH_YAW", (float)doc["M_TH_YAW"]);
-      if (doc["M_TH_PITCH"].is<String>())
+      if (doc["M_TH_PITCH"].is<float>())
         imuPref.putFloat("M_TH_PITCH", (float)doc["M_TH_PITCH"]);
-      imuPref.end();
-      if (doc["WOM_DET_THRESH"].is<int>())
+
+      if (doc["WOM_THR"].is<int>())
       {
-        int wom = doc["WOM_DET_THRESH"];
+        int wom = doc["WOM_THR"];
+        imuPref.putInt("WOM_THR", wom);
         // update live IMU wake-on-motion threshold
         imu6500_dmp::SetWakeOnMotionThresh((uint8_t)wom);
       }
-
+      imuPref.end();
       Serial.println("IMU thresholds saved to NVS");
       GetmyWebServer().send(200, "text/html", generateSuccessPage("IMU thresholds saved successfully!"));
     }
@@ -483,10 +484,9 @@ namespace fs
     auto &myServer = GetmyWebServer();
     myServer.enableFsCodeEditor(FSsource == FServerSource::LittleFS ? getFsInfo : getSdcardInfo);
     Preferences preferences;
-    preferences.begin("auth-settings", true);
+    preferences.begin("auth-settings", false);
     String storedUser = preferences.getString("username", "admin");
     String storedPwd = preferences.getString("password", "admin");
-    preferences.end();
     if (storedUser == "admin" || storedPwd == "admin")
     {
       preferences.putString("username", "admin");
@@ -497,6 +497,8 @@ namespace fs
     {
       Serial.printf("Stored credentials: User=%s, Pwd=%s\n", storedUser.c_str(), storedPwd.c_str());
     }
+    preferences.end();
+
     myServer.setAuthentication(storedUser.c_str(), storedPwd.c_str());
     myServer.printFileList(Serial, "/", 3);
     myServer.on("/car", HTTP_GET, handleCar);
@@ -529,14 +531,3 @@ namespace fs
   }
   /* Helper function to check if the session is still valid */
 }
-
-#ifdef PIO_CI
-const char *ssid = "test";
-const char *wifiPassword = "test";
-const char *mqtt_server = "test";
-const char *mqttTopic = "test";
-const char *cmdTopic = "test";
-const char *mqttUser = "test";
-const char *mqttPass = "test";
-uint32_t mqtt_port = 5000;
-#endif
