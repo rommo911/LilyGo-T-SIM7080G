@@ -115,10 +115,11 @@ namespace imu6500_dmp
     {
     case MPU6500_INTERRUPT_MOTION:
     {
-      mqttLogger.println("mpu6500: irq motion.");
+      Serial.println("mpu6500: irq motion.");
       MPU_MTION_Interrupt = true;
       MPU_MTION_Interrupt_ts = millis();
-      globalMotion.motion = true;
+      globalMotion.motionInterrupt = true;
+      lastMoved_timestamp = millis();
       break;
     }
     case MPU6500_INTERRUPT_DMP:
@@ -320,7 +321,7 @@ namespace imu6500_dmp
     MPU_MTION_Interrupt_ts = millis();
     last_baseline_reset = millis();
     Serial.println("Starting IMU DMP loop...");
-    delay(5000);
+    delay(15000);
     while (imu_dmp_loop)
     {
       if (((millis()) > (MPU_MTION_Interrupt_ts + 15000)) && ((millis()) > (last_baseline_reset + 15000)) && (motionAfterBaselineCounter > 20))

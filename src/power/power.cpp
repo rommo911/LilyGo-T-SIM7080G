@@ -279,16 +279,8 @@ namespace power
         uint64_t lifesign = millis();
         while (1)
         {
-            auto event = xEventGroupWaitBits(pmuIrqEvent, 0b01, pdTRUE, pdTRUE, pdMS_TO_TICKS(1000));
+            auto event = xEventGroupWaitBits(pmuIrqEvent, 0b01, pdTRUE, pdTRUE, pdMS_TO_TICKS(10000));
             isVbusInserted = PMU.isVbusIn();
-            if (isVbusInserted)
-            {
-                VbusInsertTimestamp = millis();
-            }
-            else
-            {
-                VbusRemovedTimestamp = millis();
-            }
             isBatteryCriticalLevel = (PMU.getBatteryPercent() <= 3U);
             isBatteryLowLevel = (PMU.getBatteryPercent() <= 8U);
             if (event & 0b01)
@@ -299,7 +291,7 @@ namespace power
             {
                 if ((millis() - lifSignTimeout) > lifesign)
                 {
-                    mqttLogger.printf(" %d level:%d ,vol %d \n", PMU.isCharging() ? 1 : 0, PMU.getBatteryPercent(), PMU.getBattVoltage());
+                    mqttLogger.printf("CarLog/batt"," %d level:%d ,vol %d \n", PMU.isCharging() ? 1 : 0, PMU.getBatteryPercent(), PMU.getBattVoltage());
                     lifesign = millis();
                     if (PMU.isCharging())
                     {
@@ -413,11 +405,14 @@ namespace power
         return PMU;
     }
 
-    uint64_t getLastVbusTs()
+    uint64_t getLastVbusInsertedTs()
     {
         return VbusInsertTimestamp;
     }
-
+    uint64_t getLastVbusRemovedTs()
+    {
+        return VbusInsertTimestamp;
+    }
     bool isBattCharging()
     {
         return isCharging;

@@ -468,7 +468,7 @@ namespace fs
 
     if (sdcard::setupSdcard() == false)
     {
-      FSsource == FServerSource::LittleFS;
+      FSsource = FServerSource::LittleFS;
       Serial.println("Using littlefs as filesystem for web server.");
       if (!LittleFS.begin(false, "/littlefs", 10))
       {
@@ -481,7 +481,7 @@ namespace fs
       Serial.println("Using SD Card as filesystem for web server.");
     }
     auto &myServer = GetmyWebServer();
-    myServer.enableFsCodeEditor(getFsInfo);
+    myServer.enableFsCodeEditor(FSsource == FServerSource::LittleFS ? getFsInfo : getSdcardInfo);
     Preferences preferences;
     preferences.begin("auth-settings", true);
     String storedUser = preferences.getString("username", "admin");
@@ -489,6 +489,8 @@ namespace fs
     preferences.end();
     if (storedUser == "admin" || storedPwd == "admin")
     {
+      preferences.putString("username", "admin");
+      preferences.putString("password", "admin");
       Serial.println("No credentials found, using default: admin/admin");
     }
     else
@@ -496,7 +498,6 @@ namespace fs
       Serial.printf("Stored credentials: User=%s, Pwd=%s\n", storedUser.c_str(), storedPwd.c_str());
     }
     myServer.setAuthentication(storedUser.c_str(), storedPwd.c_str());
-
     myServer.printFileList(Serial, "/", 3);
     myServer.on("/car", HTTP_GET, handleCar);
     /* Time and Date Page */

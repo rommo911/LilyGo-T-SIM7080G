@@ -26,10 +26,12 @@ namespace sdcard
         // SD Card VDD 3300mV
         power::getPMU().setALDO3Voltage(3300);
         power::getPMU().enableALDO3();
-        delay(1500);
+        delay(200);
         if (!SD_MMC.begin("/sdcard", true, false, 20000))
         {
             mqttLogger.println("ERROR: SD Card Mount failed!");
+            power::getPMU().disableALDO3();
+            SD_MMC.end();
             return false;
         }
         uint8_t cardType = SD_MMC.cardType();
@@ -37,6 +39,8 @@ namespace sdcard
         if (cardType == CARD_NONE)
         {
             Serial.println("No SD_MMC card attached");
+            power::getPMU().disableALDO3();
+            SD_MMC.end();
             return false;
         }
 
