@@ -163,7 +163,7 @@ extern "C"
 
     void mpu6500_dmp_resetFIFO();
 
-    uint8_t mpu6500_set_Motion_thresh(uint8_t thresh);
+    uint8_t mpu6500_set_Motion_thresh(float thresh);
 
     /**
      * @}

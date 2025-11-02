@@ -272,7 +272,7 @@ namespace fs
     float roll = imuPref.getFloat("M_TH_ROLL", 0.5f);
     float yaw = imuPref.getFloat("M_TH_YAW", 0.5f);
     float pitch = imuPref.getFloat("M_TH_PITCH", 0.5f);
-    int wom = imuPref.getInt("WOM_THR", 15);
+    float wom = imuPref.getFloat("WOM_THR", 15);
     imuPref.end();
 
     String jsonResponse = "{";
@@ -282,7 +282,7 @@ namespace fs
     jsonResponse += "\"M_TH_ROLL\":" + String(roll, 2) + ",";
     jsonResponse += "\"M_TH_YAW\":" + String(yaw, 2) + ",";
     jsonResponse += "\"M_TH_PITCH\":" + String(pitch, 2) + ",";
-    jsonResponse += "\"WOM_THR\":" + String(wom);
+    jsonResponse += "\"WOM_THR\":" + String(wom, 2);
     jsonResponse += "}";
 
     GetmyWebServer().send(200, "application/json", jsonResponse);
@@ -321,12 +321,12 @@ namespace fs
       if (doc["M_TH_PITCH"].is<float>())
         imuPref.putFloat("M_TH_PITCH", (float)doc["M_TH_PITCH"]);
 
-      if (doc["WOM_THR"].is<int>())
+      if (doc["WOM_THR"].is<float>())
       {
-        int wom = doc["WOM_THR"];
-        imuPref.putInt("WOM_THR", wom);
+        float wom = (float)doc["WOM_THR"];
+        imuPref.putFloat("WOM_THR", wom);
         // update live IMU wake-on-motion threshold
-        imu6500_dmp::SetWakeOnMotionThresh((uint8_t)wom);
+        imu6500_dmp::SetWakeOnMotionThresh(wom);
       }
       imuPref.end();
       Serial.println("IMU thresholds saved to NVS");

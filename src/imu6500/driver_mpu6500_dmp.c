@@ -883,7 +883,7 @@ void mpu6500_dmp_resetFIFO()
     mpu6500_fifo_reset(&gs_handle);
 }
 
-uint8_t mpu6500_set_Motion_thresh(uint8_t thresh)
+uint8_t mpu6500_set_Motion_thresh(float thresh)
 {
     uint8_t reg;
     mpu6500_motion_threshold_convert_to_register(&gs_handle, thresh, &reg);

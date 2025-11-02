@@ -484,7 +484,7 @@ namespace imu6500_dmp
     return str;
   }
 
-  bool SetWakeOnMotionThresh(uint8_t motion_thresh_mg)
+  bool SetWakeOnMotionThresh(float motion_thresh_mg)
   {
     bool ret = false;
     auto res = xSemaphoreTake(wireMutex, pdMS_TO_TICKS(100));
