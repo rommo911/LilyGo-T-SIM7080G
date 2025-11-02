@@ -106,11 +106,12 @@ void loopPowerCheck()
 {
     if (power::isPowerVBUSOn())
     {
-        fast_led::set_solid(0, {0, 25, 0});
+        fast_led::set_solid(0, {0, 20, 0});
+        return;
     }
     else
     {
-        if (((millis() - power::getLastVbusTs()) < 1000) && (millis() - power::getLastVbusTs()) > 500) // turn off led after vbus removed
+        if (((millis() - power::getLastVbusTs()) < 2000) && (millis() - power::getLastVbusTs()) > 1000) // turn off led after vbus removed
         {
             fast_led::stop_led(0);
         }
@@ -163,12 +164,13 @@ void loopImuMotion()
         {
             if (waitForCarhelper)
             {
-                fast_led::start_blink(1, {0, 50, 0}, CRGB::Black, 150, 2500); // crete blink patter to inform user its waiting
+                fast_led::start_blink(1, {0, 20, 0}, CRGB::Black, 150, 2500, 30); // crete blink patter to inform user its waiting
                 waitForCarhelper = false;
             }
         }
         return;
     }
+
     if (_motionTriggered)
     {
         Serial.println("Loop Motion detected ");

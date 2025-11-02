@@ -26,6 +26,7 @@ namespace power
     std::atomic<bool> isPekeyShortPressed;
 
     uint64_t VbusInsertTimestamp = 0;
+    uint64_t VbusRemovedTimestamp = 0;
 
     void loopPower(void *arg);
 
@@ -200,123 +201,137 @@ namespace power
         }
         }
         isVbusInserted = PMU.isVbusIn();
-
+        if (isVbusInserted)
+        {
+            VbusInsertTimestamp = millis();
+        }
+        else
+        {
+            VbusRemovedTimestamp = millis();
+        }
         isBatteryCriticalLevel = PMU.getBatteryPercent() <= 3;
         isBatteryLowLevel = PMU.getBatteryPercent() <= 8;
         return true;
     }
 
+    void handleInterrupt()
+    {
+        // Get PMU Interrupt Status Register
+        uint32_t status = PMU.getIrqStatus();
+        if (PMU.isVbusInsertIrq())
+        {
+            mqttLogger.println("isVbusInsert");
+            isVbusInserted = true;
+            VbusInsertTimestamp = millis();
+        }
+        if (PMU.isVbusRemoveIrq())
+        {
+            mqttLogger.println("isVbusRemove");
+            isVbusInserted = false;
+            VbusRemovedTimestamp = millis();
+        }
+        if (PMU.isBatInsertIrq())
+        {
+            mqttLogger.println("isBatInsert");
+        }
+        if (PMU.isBatRemoveIrq())
+        {
+            mqttLogger.println("isBatRemove");
+        }
+        if (PMU.isPekeyShortPressIrq())
+        {
+            mqttLogger.println("isPekeyShortPress");
+            isPekeyShortPressed = true;
+        }
+        if (PMU.isPekeyLongPressIrq())
+        {
+            mqttLogger.println("isPekeyLongPress");
+        }
+        if (PMU.isBatChagerDoneIrq())
+        {
+            mqttLogger.println("isBatChagerDoneIrq");
+        }
+        if (PMU.isBatChagerStartIrq())
+        {
+            mqttLogger.println("isBatChagerStartIrq");
+        }
+        // When the set low-voltage battery percentage warning threshold is reached,
+        // set the threshold through getLowBatWarnThreshold( 5% ~ 20% )
+        if (PMU.isDropWarningLevel2Irq())
+        {
+            mqttLogger.println("isDropWarningLevel2Irq");
+        }
+        // When the set low-voltage battery percentage shutdown threshold is reached
+        // set the threshold through setLowBatShutdownThreshold()
+        if (PMU.isDropWarningLevel1Irq())
+        {
+            mqttLogger.println("isDropWarningLevel1Irq");
+        }
+        // For more interrupt sources, please check XPowersLib
+        // Clear PMU Interrupt Status Register
+        PMU.clearIrqStatus();
+    }
+
     void loopPower(void *arg)
     {
         // mqttLogger.println("entering power loop");
+        static const uint32_t lifSignTimeout = 5U * 1000U;
+        uint64_t lifesign = millis();
         while (1)
         {
+            auto event = xEventGroupWaitBits(pmuIrqEvent, 0b01, pdTRUE, pdTRUE, pdMS_TO_TICKS(1000));
             isVbusInserted = PMU.isVbusIn();
             if (isVbusInserted)
             {
                 VbusInsertTimestamp = millis();
             }
+            else
+            {
+                VbusRemovedTimestamp = millis();
+            }
             isBatteryCriticalLevel = (PMU.getBatteryPercent() <= 3U);
             isBatteryLowLevel = (PMU.getBatteryPercent() <= 8U);
-            auto event = xEventGroupWaitBits(pmuIrqEvent, 0b01, pdTRUE, pdTRUE, pdMS_TO_TICKS(5000));
             if (event & 0b01)
             {
-                // Get PMU Interrupt Status Register
-                uint32_t status = PMU.getIrqStatus();
-                if (PMU.isVbusInsertIrq())
-                {
-                    mqttLogger.println("isVbusInsert");
-                    isVbusInserted = true;
-                    VbusInsertTimestamp = millis();
-                }
-                if (PMU.isVbusRemoveIrq())
-                {
-                    mqttLogger.println("isVbusRemove");
-                    isVbusInserted = false;
-                }
-                if (PMU.isBatInsertIrq())
-                {
-                    mqttLogger.println("isBatInsert");
-                }
-                if (PMU.isBatRemoveIrq())
-                {
-                    mqttLogger.println("isBatRemove");
-                }
-                if (PMU.isPekeyShortPressIrq())
-                {
-                    mqttLogger.println("isPekeyShortPress");
-                    isPekeyShortPressed = true;
-                }
-                if (PMU.isPekeyLongPressIrq())
-                {
-                    mqttLogger.println("isPekeyLongPress");
-                }
-                if (PMU.isBatChagerDoneIrq())
-                {
-                    mqttLogger.println("isBatChagerDoneIrq");
-                }
-                if (PMU.isBatChagerStartIrq())
-                {
-                    mqttLogger.println("isBatChagerStartIrq");
-                }
-                // When the set low-voltage battery percentage warning threshold is reached,
-                // set the threshold through getLowBatWarnThreshold( 5% ~ 20% )
-                if (PMU.isDropWarningLevel2Irq())
-                {
-                    mqttLogger.println("isDropWarningLevel2Irq");
-                }
-                // When the set low-voltage battery percentage shutdown threshold is reached
-                // set the threshold through setLowBatShutdownThreshold()
-                if (PMU.isDropWarningLevel1Irq())
-                {
-                    mqttLogger.println("isDropWarningLevel1Irq");
-                }
-                // For more interrupt sources, please check XPowersLib
-                // Clear PMU Interrupt Status Register
-                PMU.clearIrqStatus();
+                handleInterrupt();
             }
             if (PMU.isBatteryConnect())
             {
-                if (PMU.isCharging())
+                if ((millis() - lifSignTimeout) > lifesign)
                 {
-                    Serial.printf("isCharging: %d % \n", PMU.getBatteryPercent());
-                    switch ((uint8_t)PMU.getBatteryPercent())
+                    mqttLogger.printf(" %d level:%d ,vol %d \n", PMU.isCharging() ? 1 : 0, PMU.getBatteryPercent(), PMU.getBattVoltage());
+                    lifesign = millis();
+                    if (PMU.isCharging())
                     {
-                    case 90 ... 100:
-                    {
-                        PMU.setChargingLedMode(XPOWERS_CHG_LED_ON);
-                        break;
-                    }
-                    case 50 ... 84:
-                    {
-                        PMU.setChargingLedMode(XPOWERS_CHG_LED_BLINK_1HZ);
-                        break;
-                    }
-                    case 0 ... 49:
-                    {
-                        PMU.setChargingLedMode(XPOWERS_CHG_LED_BLINK_4HZ);
-                        break;
-                    }
-                    default:
-                    {
-                    }
-                    }
-                }
-                else
-                {
-                    if (PMU.getBatteryPercent() > 99)
-                    {
-                        PMU.setChargingLedMode(XPOWERS_CHG_LED_ON);
+                        switch ((uint8_t)PMU.getBatteryPercent())
+                        {
+                        case 91 ... 100:
+                        {
+                            PMU.setChargingLedMode(XPOWERS_CHG_LED_ON);
+                            break;
+                        }
+                        case 50 ... 90:
+                        {
+                            PMU.setChargingLedMode(XPOWERS_CHG_LED_BLINK_1HZ);
+                            break;
+                        }
+                        case 0 ... 49:
+                        {
+                            PMU.setChargingLedMode(XPOWERS_CHG_LED_BLINK_4HZ);
+                            break;
+                        }
+                        default:
+                        {
+                        }
+                        }
                     }
                     else
                     {
                         PMU.setChargingLedMode(XPOWERS_CHG_LED_ON);
                         delay(50);
                         PMU.setChargingLedMode(XPOWERS_CHG_LED_OFF);
-                        delay(1500);
                     }
                 }
-                mqttLogger.printf(" %d level:%d %% ,vol %d \n", PMU.isCharging() ? 1 : 0, PMU.getBatteryPercent(), PMU.getBattVoltage());
             }
             else
             {
