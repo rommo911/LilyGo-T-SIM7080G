@@ -39,20 +39,26 @@ namespace power
 // helper: map 0..100% to a red->yellow->green gradient
 static CRGB batteryColor(uint8_t percent)
 {
-    if (percent > 100)
-        percent = 100;
+    if (percent >= 90)
+    {
+        return CRGB(0, 200, 0);
+    }
+    if (percent <= 10)
+    {
+        return CRGB(150, 0, 0);
+    }
     uint8_t r = 0, g = 0;
     if (percent <= 50)
     {
         // red -> yellow (increase green)
-        r = 255;
+        r = 150;
         g = (uint8_t)((uint16_t)percent * 255 / 50); // 0..255
     }
     else
     {
         // yellow -> green (decrease red)
         g = 255;
-        r = (uint8_t)((uint16_t)(100 - percent) * 255 / 50); // 255..0
+        r = (uint8_t)((uint16_t)(100 - percent) * 150 / 50); // 255..0
     }
     return CRGB(r, g, 0);
 }

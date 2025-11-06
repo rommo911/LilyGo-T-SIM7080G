@@ -108,7 +108,7 @@ namespace modem
                 }
                 gps_enabled = true;
                 Serial.println("GPS enable OK..starting task");
-                xTaskCreate(GPSlocationTask, "gps", 4096, NULL, 10, NULL);
+                xTaskCreate(GPSlocationTask, "gps", 4096, NULL, 1, NULL);
                 return true;
             }
             else

@@ -53,10 +53,10 @@ extern "C"
  * @brief mpu6500 dmp example default definition
  */
 #define MPU6500_DMP_DEFAULT_CLOCK_SOURCE MPU6500_CLOCK_SOURCE_PLL                /**< pll */
-#define MPU6500_DMP_DEFAULT_RATE 100                                             /**< 50Hz */
+#define MPU6500_DMP_DEFAULT_RATE 50                                             /**< 50Hz */
 #define MPU6500_DMP_DEFAULT_ACCELEROMETER_RANGE MPU6500_ACCELEROMETER_RANGE_2G   /**< 2g */
 #define MPU6500_DMP_DEFAULT_GYROSCOPE_RANGE MPU6500_GYROSCOPE_RANGE_2000DPS      /**< 2000dps */
-#define MPU6500_DMP_DEFAULT_LOW_PASS_FILTER MPU6500_LOW_PASS_FILTER_3            /**< low pass filter 3 */
+#define MPU6500_DMP_DEFAULT_LOW_PASS_FILTER MPU6500_ACCELEROMETER_LOW_PASS_FILTER_3            /**< low pass filter 3 */
 #define MPU6500_DMP_DEFAULT_CYCLE_WAKE_UP MPU6500_BOOL_FALSE                     /**< disable cycle wake up */
 #define MPU6500_DMP_DEFAULT_CYCLE_WAKE_UP_LOW_PWER MPU6500_BOOL_FALSE             /**< disable cycle wake up */
 #define MPU6500_DMP_DEFAULT_LOW_POWER_ACCEL_OUTPUT_RATE MPU6500_LOW_POWER_ACCEL_OUTPUT_RATE_62P50  /**< 62.5Hz */
@@ -81,8 +81,6 @@ extern "C"
 #define MPU6500_DMP_DEFAULT_ACCELEROMETER_CHOICE 0                                                /**< 0 */
 #define MPU6500_DMP_DEFAULT_ACCELEROMETER_LOW_PASS_FILTER MPU6500_ACCELEROMETER_LOW_PASS_FILTER_3 /**< low pass filter 3 */
 #define MPU6500_DMP_DEFAULT_ACCELEROMETER_COMPARE MPU6500_BOOL_TRUE                               /**< enable compare */
-#define MPU6500_DMP_DEFAULT_MAGNETOMETER_MODE MPU6500_MAGNETOMETER_MODE_CONTINUOUS2               /**< 100Hz */
-#define MPU6500_DMP_DEFAULT_MAGNETOMETER_BITS MPU6500_MAGNETOMETER_BITS_16                        /**< 16bits */
 #define MPU6500_DMP_DEFAULT_IIC_CLOCK MPU6500_IIC_CLOCK_400_KHZ                                   /**< 400KHz */
 #define MPU6500_DMP_DEFAULT_IIC_MULTI_MASTER MPU6500_BOOL_TRUE                                    /**< enable multi master */
 #define MPU6500_DMP_DEFAULT_IIC_WAIT_FOR_EXTERNAL_SENSOR MPU6500_BOOL_FALSE                       /**< disable wait for external sensor */
@@ -91,14 +89,14 @@ extern "C"
 
     typedef struct motion_t
     {
-        int16_t accel_raw[10][3];
-        float accel_g[10][3];
-        int16_t gyro_raw[10][3];
-        float gyro_dps[10][3];
-        int32_t quat[10][4];
-        float pitch[10];
-        float roll[10];
-        float yaw[10];
+        int16_t accel_raw[5][3];
+        float accel_g[5][3];
+        int16_t gyro_raw[5][3];
+        float gyro_dps[5][3];
+        int32_t quat[5][4];
+        float pitch[5];
+        float roll[5];
+        float yaw[5];
         uint16_t l;
         bool MotionDetcted;
     } motion_t;

@@ -10,4 +10,5 @@ uint64_t getLastCamOnTs();
 
 uint64_t getLastCamOffTs();
 
+void loadTimingPref();
 #endif // MAIN_H_

@@ -291,7 +291,7 @@ namespace power
             {
                 if ((millis() - lifSignTimeout) > lifesign)
                 {
-                    mqttLogger.printf("CarLog/batt"," %d level:%d ,vol %d \n", PMU.isCharging() ? 1 : 0, PMU.getBatteryPercent(), PMU.getBattVoltage());
+                    mqttLogger.printf("CarLog/batt", " %d level:%d ,vol %d \n", PMU.isCharging() ? 1 : 0, PMU.getBatteryPercent(), PMU.getBattVoltage());
                     lifesign = millis();
                     if (PMU.isCharging())
                     {
@@ -446,39 +446,31 @@ namespace power
         mqttLogger.println("Entering deep sleep mode with IMU and PMU wakeup");
         detachInterrupt(PMU_INPUT_PIN);
         detachInterrupt(MOTION_INTRRUPT_PIN);
-        modem::shutdownModem();
-        sdcard::shutdownSdcard();
         rtc_gpio_hold_en(MOTION_INTRRUPT_PIN);
         rtc_gpio_hold_en(PMU_INPUT_PIN_);
         uint64_t wakeup_mask = (1ULL << MOTION_INTRRUPT_PIN) | (1ULL << PMU_INPUT_PIN);
-        Serial.println("Going to sleep now with mask " + String(wakeup_mask, BIN) + "...");
+        mqttLogger.printf("Going to sleep now with mask %s ", String(wakeup_mask,BIN).c_str());
         ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup_io(wakeup_mask, ESP_EXT1_WAKEUP_ANY_LOW));
         fast_led::set_solid(0, {10, 10, 0}); // turn off led before sleep
-        delay(250);
+        delay(500);
         esp_deep_sleep_start();
     }
 
     void DeepSleepWith_PMU_Wake()
     {
         fast_led::stop_led(0);
-        if (isVbusInserted)
-        {
-            mqttLogger.println("isVbusInserted, skip deep sleep");
-            return;
-        }
-        modem::shutdownModem();
-        sdcard::shutdownSdcard();
-        mqttLogger.println("Entering deep sleep mode with IMU and PMU wakeup");
+        mqttLogger.println("Entering deep sleep mode with PMU wakeup");
         // Configure wakeup source: IMU interrupt pin
         detachInterrupt(PMU_INPUT_PIN);
         detachInterrupt(MOTION_INTRRUPT_PIN);
         uint64_t wakeup_mask = (1ULL << PMU_INPUT_PIN);
-        Serial.println("Going to sleep now with mask " + String(wakeup_mask, BIN) + "...");
+        mqttLogger.printf("Going to sleep now with mask %s ", String(wakeup_mask,BIN).c_str());
         ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup_io(wakeup_mask, ESP_EXT1_WAKEUP_ANY_LOW));
         fast_led::set_solid(0, {10, 0, 0}); // turn off led before sleep
-        delay(50);
+        delay(500);
         esp_deep_sleep_start();
     }
+
     WakeUpReason Get_wake_reason()
     {
         static WakeUpReason wakeUpReason = WakeUpReason::UNKNOWN;

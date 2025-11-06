@@ -10,6 +10,7 @@
 #include "wifi/wifi.hpp"
 #include "SD_MMC.h"
 #include "imu6500/imu_DMP6.hpp"
+#include "main.hpp"
 
 namespace fs
 {
@@ -325,10 +326,10 @@ namespace fs
       {
         float wom = (float)doc["WOM_THR"];
         imuPref.putFloat("WOM_THR", wom);
-        // update live IMU wake-on-motion threshold
-        imu6500_dmp::SetWakeOnMotionThresh(wom);
       }
+      // update live IMU wake-on-motion threshold
       imuPref.end();
+      imu6500_dmp::SetWakeOnMotionThresh();
       Serial.println("IMU thresholds saved to NVS");
       GetmyWebServer().send(200, "text/html", generateSuccessPage("IMU thresholds saved successfully!"));
     }
@@ -455,6 +456,81 @@ namespace fs
     GetmyWebServer().send(200, "application/json", jsonResponse);
   }
 
+  static void handleTimingSettings()
+  {
+    if (!GetmyWebServer().authenticate_internal())
+    {
+      return;
+    }
+    GetmyWebServer().sendHeader("Connection", "close");
+    GetmyWebServer().send(200, "text/html", timingSettingsPage);
+  }
+
+  static void handleGetTimingSettings()
+  {
+    if (!GetmyWebServer().authenticate_internal())
+    {
+      return;
+    }
+    Preferences pref;
+    pref.begin("timing", true);
+    uint32_t wifiTimeout = pref.getUInt("wifitm", 300000);           // 5 minutes default
+    uint32_t noMotionTimeout = pref.getUInt("nomotiontm", 10000);    // 10 seconds default
+    uint32_t secureModeTimeout = pref.getUInt("securmodetm", 10000); // 10 seconds default
+    pref.end();
+
+    String jsonResponse = "{";
+    jsonResponse += "\"wifitm\":" + String(wifiTimeout) + ",";
+    jsonResponse += "\"nomotiontm\":" + String(noMotionTimeout) + ",";
+    jsonResponse += "\"securmodetm\":" + String(secureModeTimeout);
+    jsonResponse += "}";
+
+    GetmyWebServer().send(200, "application/json", jsonResponse);
+  }
+
+  static void handleSetTimingSettings()
+  {
+    if (!GetmyWebServer().authenticate_internal())
+    {
+      return;
+    }
+
+    if (GetmyWebServer().hasArg("plain"))
+    {
+      String json = GetmyWebServer().arg("plain");
+      JsonDocument doc;
+      DeserializationError error = deserializeJson(doc, json);
+      if (error)
+      {
+        GetmyWebServer().send(400, "text/plain", "Invalid JSON");
+        return;
+      }
+
+      Preferences pref;
+      pref.begin("timing", false);
+      if (doc["wifitm"].is<uint32_t>())
+      {
+        pref.putUInt("wifitm", doc["wifitm"].as<uint32_t>());
+      }
+      if (doc["nomotiontm"].is<uint32_t>())
+      {
+        pref.putUInt("nomotiontm", doc["nomotiontm"].as<uint32_t>());
+      }
+      if (doc["securmodetm"].is<uint32_t>())
+      {
+        pref.putUInt("securmodetm", doc["securmodetm"].as<uint32_t>());
+      }
+      pref.end();
+
+      loadTimingPref(); // from main.h
+
+      GetmyWebServer().send(200, "text/plain", "Settings updated successfully");
+    }
+    else
+    {
+      GetmyWebServer().send(400, "text/plain", "No data received");
+    }
+  }
   static void handleNotFound()
   {
     GetmyWebServer().send(404, "text/plain", "404: Not Found");
@@ -525,6 +601,11 @@ namespace fs
     myServer.on("/wifiSettings", HTTP_GET, handleWifiSettings);
     myServer.on("/getWifiSettings", HTTP_GET, handleGetWifiSettings);
     myServer.on("/setWifiSettings", HTTP_POST, handleSetWifiSettings);
+
+    /* Timing Settings Pages */
+    myServer.on("/timingSettings", HTTP_GET, handleTimingSettings);
+    myServer.on("/getTimingSettings", HTTP_GET, handleGetTimingSettings);
+    myServer.on("/setTimingSettings", HTTP_POST, handleSetTimingSettings);
 
     myServer.begin();
     return true;

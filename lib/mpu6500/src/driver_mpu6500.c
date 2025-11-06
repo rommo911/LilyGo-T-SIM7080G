@@ -4099,7 +4099,16 @@ uint8_t mpu6500_deinit(mpu6500_handle_t *handle)
     {
         return 3;                                                               /* return error */
     }
-    
+    prev = 1 << 7;      
+    res = a_mpu6500_write(handle, MPU6500_REG_PWR_MGMT_1, &prev, 1);                /* write pwr mgmt 1 */
+    if (res != 0)                                                                   /* check the result */
+    {
+        handle->debug_print("mpu6500: write pwr mgmt reset device failed.\n");                 /* write pwr mgmt 1 failed */
+        (void)a_mpu6500_deinit(handle);                                             /* iic or spi deinit */
+        
+        return 4;                                                                   /* return error */
+    }
+    handle->delay_ms(100);                                                           /* delay 10 ms */
     prev = (1 << 6) | (1 << 3) | (7 << 0);                                      /* enter sleep mode */
     res = a_mpu6500_write(handle, MPU6500_REG_PWR_MGMT_1, &prev, 1);            /* write pwr mgmt 1 */
     if (res != 0)                                                               /* check the result */

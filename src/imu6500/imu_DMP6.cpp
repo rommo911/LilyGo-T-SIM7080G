@@ -34,6 +34,8 @@
 #include <atomic>
 #include "power/power.hpp"
 #include <Preferences.h>
+#include "imu6500/motionCalc.hpp"
+
 namespace imu6500_dmp
 {
 
@@ -55,21 +57,16 @@ namespace imu6500_dmp
   float WOM_DET_THRESH = 15.0f;
   // Motion detection state
   // Baseline linear acceleration (gravity removed) in g's
-  float baseline_ax = 0.0f;
-  float baseline_ay = 0.0f;
-  float baseline_az = 0.0f;
-  float baseline_yaw = 0.0f;
-  float baseline_pitch = 0.0f;
-  float baseline_roll = 0.0f;
+  static baseline_t baseline;
   float dax = 0.0f, day = 0.0f, daz = 0.0f, droll = 0.0f, dyaw = 0.0f, dpitch = 0.0f;
-  uint16_t motionAfterBaselineCounter = 0;
-  bool baseline_ready = false;
-  uint64_t last_baseline_reset = 0;
+  float qf[4];
 
-  const uint16_t BASELINE_SAMPLES = 100;
+  uint16_t motionAfterBaselineCounter = 0;
+
+  const uint16_t BASELINE_SAMPLES = 50;
 
   static bool imu_dmp_loop = false;
-  SemaphoreHandle_t imuDataSemaphore, wireMutex;
+  SemaphoreHandle_t imuDataSemaphore, wireMutex, getterSem;
   uint16_t calibrationDebounce = 0;
 
   void imu_loop(void *arg);
@@ -107,6 +104,7 @@ namespace imu6500_dmp
       }
       delay(15);
     }
+    vTaskDelete(NULL);
   }
 
   void MPU_InterruptCallback(uint8_t type)
@@ -115,17 +113,18 @@ namespace imu6500_dmp
     {
     case MPU6500_INTERRUPT_MOTION:
     {
-      Serial.println("mpu6500: irq motion.");
+      // Serial.println("mpu6500: irq motion.");
       MPU_MTION_Interrupt = true;
       MPU_MTION_Interrupt_ts = millis();
       globalMotion.motionInterrupt = true;
+      globalMotion.ts = millis();
       lastMoved_timestamp = millis();
       break;
     }
     case MPU6500_INTERRUPT_DMP:
     {
       // Serial.println("mpu6500: irq DMP_READY");
-      InterruptMotion.l = 10;
+      InterruptMotion.l = 5;
       if (mpu6500_dmp_read_motion(&InterruptMotion) == 0)
       {
         xSemaphoreTake(imuDataSemaphore, pdMS_TO_TICKS(10));
@@ -188,6 +187,8 @@ namespace imu6500_dmp
     {
       vSemaphoreCreateBinary(wireMutex);
       xSemaphoreGive(wireMutex);
+      vSemaphoreCreateBinary(getterSem);
+      xSemaphoreGive(getterSem);
       vSemaphoreCreateBinary(imuDataSemaphore);
       xSemaphoreGive(imuDataSemaphore);
     }
@@ -231,14 +232,14 @@ namespace imu6500_dmp
     pinMode(MOTION_INTRRUPT_PIN, INPUT_PULLUP);
     attachInterrupt(MOTION_INTRRUPT_PIN, IMUDataInterrupt, FALLING);
     imu_dmp_loop = true;
-    xTaskCreate(imu_Interrupt_loop, "IMU", 4096, NULL, 1, NULL);
-    xTaskCreate(imu_loop, "IMU", 4096, NULL, 10, NULL);
+    xTaskCreate(imu_Interrupt_loop, "IMU", 8192, NULL, 1, NULL);
+    xTaskCreate(imu_loop, "IMUloop", 8192, NULL, 1, NULL);
     return true;
   }
 
   bool waitforBaseline()
   {
-    if (!baseline_ready)
+    if (!baseline.ready)
     {
       calibrationDebounce = 0;
       MPU_DMP_DATA_READY = false;
@@ -257,7 +258,6 @@ namespace imu6500_dmp
       Serial.printf("Baseline calibrate started \n\r");
       for (uint16_t i = 0; i < BASELINE_SAMPLES; ++i)
       {
-        delay(20);
         if (MPU_MTION_Interrupt)
         {
           Serial.printf("Baseline calibrate FAILED \n\r");
@@ -266,17 +266,24 @@ namespace imu6500_dmp
         motion_t data;
         while (!MPU_DMP_DATA_READY)
         {
-          delay(10);
+          delay(30);
         };
         MPU_DMP_DATA_READY = false;
-        xSemaphoreTake(imuDataSemaphore, pdMS_TO_TICKS(15));
+        xSemaphoreTake(imuDataSemaphore, pdMS_TO_TICKS(30));
         auto motionData = globalmotiondata;
         xSemaphoreGive(imuDataSemaphore);
         for (int i = 0; i < motionData.l; i++)
         {
-          sx += motionData.accel_g[i][0];
-          sy += motionData.accel_g[i][1];
-          sz += motionData.accel_g[i][2];
+
+          quat_q30_to_float(globalmotiondata.quat[i], qf);
+          float a_world[3];
+          rotate_accel_world(qf, globalmotiondata.accel_g[i], a_world);
+          sx += fabs(a_world[0]);
+          sy += fabs(a_world[1]);
+          sz += fabs(a_world[2] - 1.0f);
+          /*sx += motionData.accel_g[i][0];
+            sy += motionData.accel_g[i][1];
+            sz += motionData.accel_g[i][2];*/
 
           float yaw_rad = radians(motionData.yaw[i]);
           float roll_rad = radians(motionData.roll[i]);
@@ -293,40 +300,42 @@ namespace imu6500_dmp
       }
       if (collected > 0)
       {
-        baseline_ax = sx / collected;
-        baseline_ay = sy / collected;
-        baseline_az = sz / collected;
-        baseline_yaw = degrees(atan2(syaw_sin / collected, syaw_cos / collected));
-        baseline_pitch = degrees(atan2(spitch_sin / collected, spitch_cos / collected));
-        baseline_roll = degrees(atan2(sroll_sin / collected, sroll_cos / collected));
+        baseline.ax = sx / collected;
+        baseline.ay = sy / collected;
+        baseline.az = sz / collected;
+        baseline.yaw = degrees(atan2(syaw_sin / collected, syaw_cos / collected));
+        baseline.pitch = degrees(atan2(spitch_sin / collected, spitch_cos / collected));
+        baseline.roll = degrees(atan2(sroll_sin / collected, sroll_cos / collected));
 
-        if (baseline_yaw < 0)
-          baseline_yaw += 360.0f;
-        if (baseline_pitch < 0)
-          baseline_pitch += 360.0f;
-        if (baseline_roll < 0)
-          baseline_roll += 360.0f;
-        baseline_ready = true;
+        if (baseline.yaw < 0)
+          baseline.yaw += 360.0f;
+        if (baseline.pitch < 0)
+          baseline.pitch += 360.0f;
+        if (baseline.roll < 0)
+          baseline.roll += 360.0f;
+        baseline.ready = true;
         Serial.println("Motion detected baseline ready ");
-        Serial.printf(" ax %.5f, ay %.5f, az %.5f, yaw %.5f, pitch %.5f, roll %.5f \n", baseline_ax, baseline_ay, baseline_az, baseline_yaw, baseline_pitch, baseline_roll);
-        last_baseline_reset = millis();
+        Serial.printf(" ax %.5f, ay %.5f, az %.5f, yaw %.5f, pitch %.5f, roll %.5f \n", baseline.ax, baseline.ay, baseline.az, baseline.yaw, baseline.pitch, baseline.roll);
+        Serial.printf(" thx %.4f, thy %.4f, thz %.4f, yaw %.2f, pitch %.2f, roll %.2f \n",
+                      MOTION_THRESHOLD_GX, MOTION_THRESHOLD_GY, MOTION_THRESHOLD_GZ, MOTION_THRESHOLD_YAW, MOTION_THRESHOLD_PITCH, MOTION_THRESHOLD_ROLL);
+        baseline.last_reset = millis();
       }
     }
 
-    return baseline_ready;
+    return baseline.ready;
   }
 
   void imu_loop(void *arg)
   {
     MPU_MTION_Interrupt_ts = millis();
-    last_baseline_reset = millis();
+    baseline.last_reset = millis();
     Serial.println("Starting IMU DMP loop...");
-    delay(15000);
     while (imu_dmp_loop)
     {
-      if (((millis()) > (MPU_MTION_Interrupt_ts + 1500)) && ((millis()) > (last_baseline_reset + 15000)) && (motionAfterBaselineCounter > 30))
+      if (((millis()) > (MPU_MTION_Interrupt_ts + 1500)) && ((millis()) > (baseline.last_reset + 15000)) && (motionAfterBaselineCounter > 30))
       {
         Serial.println("Periodic baseline calibration");
+        Serial.flush();
         resetBaseline();
       }
       if (!waitforBaseline())
@@ -335,114 +344,97 @@ namespace imu6500_dmp
         continue;
       }
       /* Read a packet from FIFO */
+      if (MPU_MTION_Interrupt)
+      {
+        MPU_MTION_Interrupt = false;
+        Serial.println("interrupt mtion detected");
+      }
       if (MPU_DMP_DATA_READY)
       { // Get the Latest packet
+        xSemaphoreTake(getterSem, pdMS_TO_TICKS(30));
+        globalMotion.reset();
+        xSemaphoreGive(getterSem);
         MPU_DMP_DATA_READY = false;
         // // Compute delta from baseline
-        uint16_t collected = 0;
-        xSemaphoreTake(imuDataSemaphore, pdMS_TO_TICKS(15));
-        float sroll = 0.f, syaw = 0.f, spitch = 0.f;
+        xSemaphoreTake(imuDataSemaphore, pdMS_TO_TICKS(30));
         for (uint8_t i = 0; i < globalmotiondata.l; i++)
         {
-          dax = fabs(globalmotiondata.accel_g[i][0] - baseline_ax);
-          day = fabs(globalmotiondata.accel_g[i][1] - baseline_ay);
-          daz = fabs(globalmotiondata.accel_g[i][2] - baseline_az);
 
-          sroll += angleDiff(globalmotiondata.roll[i], baseline_roll);
-          syaw += angleDiff(globalmotiondata.yaw[i], baseline_yaw);
-          spitch += angleDiff(globalmotiondata.pitch[i], baseline_pitch);
+          droll = angleDiff(globalmotiondata.roll[i], baseline.roll);
+          dyaw = angleDiff(globalmotiondata.yaw[i], baseline.yaw);
+          dpitch = angleDiff(globalmotiondata.pitch[i], baseline.pitch);
+          quat_q30_to_float(globalmotiondata.quat[i], qf);
+          float a_world[3];
+          rotate_accel_world(qf, globalmotiondata.accel_g[i], a_world);
+          float a_lin[3] = {fabs(a_world[0]), fabs(a_world[1]), fabs(a_world[2] - 1.0f)};
+          // magnitude of linear accel (g)
+          float mag = sqrtf((a_lin[0] * a_lin[0]) + (a_lin[1] * a_lin[1]) /*+ (a_lin[2] * a_lin[2])*/);
 
-          collected++;
-        }
-        dax /= collected;
-        day /= collected;
-        daz /= collected;
-        droll = sroll / collected;
-        dyaw = syaw / collected;
-        dpitch = spitch / collected;
-        if (dax > MOTION_THRESHOLD_GX)
-        {
-          if (dax > 0.1f && (calibrationDebounce++ > 10))
+          /*dax = fabs(globalmotiondata.accel_g[i][0] - baseline.ax);
+          day = fabs(globalmotiondata.accel_g[i][1] - baseline.ay);
+          daz = fabs(globalmotiondata.accel_g[i][2] - baseline.az);*/
+
+          dax = fabs(a_lin[0] - baseline.ax);
+          day = fabs(a_lin[1] - baseline.ay);
+          daz = fabs(a_lin[2] - baseline.az);
+          xSemaphoreTake(getterSem, pdMS_TO_TICKS(30));
+          if (dax > MOTION_THRESHOLD_GX)
           {
-            Serial.println("dax baseline calibration");
-            resetBaseline();
+            globalMotion.x = true;
+            lastMoved_timestamp = millis();
+            Serial.printf("Motion  diff x= %.4f  \n", dax);
           }
-          globalMotion.x = true;
-          lastMoved_timestamp = millis();
-          Serial.printf("Motion  diff x= %.4f \n", dax);
-        }
-        if (day > MOTION_THRESHOLD_GY)
-        {
-          if (day > 0.1f && (calibrationDebounce++ > 10))
+          if (day > MOTION_THRESHOLD_GY)
           {
-            Serial.println("day baseline calibration");
-            resetBaseline();
+            globalMotion.y = true;
+            lastMoved_timestamp = millis();
+            Serial.printf("Motion diff y = %.4f \n", day);
           }
-          globalMotion.y = true;
-          lastMoved_timestamp = millis();
-          Serial.printf("Motion diff y = %.4f \n", day);
-        }
-        if (daz > MOTION_THRESHOLD_GZ)
-        {
-          if (daz > 0.1f && (calibrationDebounce++ > 10))
+          if (daz > MOTION_THRESHOLD_GZ)
           {
-            Serial.println("daz baseline calibration");
-            resetBaseline();
+            globalMotion.z = true;
+            Serial.printf("Motion diff z = %.4f \n", daz);
           }
-          globalMotion.z = true;
-          lastMoved_timestamp = millis();
-          Serial.printf("Motion diff z = %.4f \n", daz);
-        }
-        if (droll > MOTION_THRESHOLD_ROLL)
-        {
-          if (droll > 1 && (calibrationDebounce++ > 10))
+          if (droll > MOTION_THRESHOLD_ROLL)
           {
-            Serial.println("droll baseline calibration");
-            resetBaseline();
+
+            globalMotion.roll = true;
+            Serial.printf("Motion droll = %.4f \n", droll);
           }
-          globalMotion.roll = true;
-          lastMoved_timestamp = millis();
-          Serial.printf("Motion droll = %.4f \n", droll);
-        }
-        if (dyaw > MOTION_THRESHOLD_YAW)
-        {
-          if (dyaw > 1 && (calibrationDebounce++ > 10))
+          if (dyaw > MOTION_THRESHOLD_YAW)
           {
-            Serial.println("dyaw baseline calibration");
-            resetBaseline();
+
+            globalMotion.yaw = true;
+            Serial.printf("Motion dyaw = %.4f \n", dyaw);
           }
-          globalMotion.yaw = true;
-          lastMoved_timestamp = millis();
-          Serial.printf("Motion dyaw = %.4f \n", dyaw);
-        }
-        if (dpitch > MOTION_THRESHOLD_PITCH)
-        {
-          if (dpitch > 1 && (calibrationDebounce++ > 10))
+          if (dpitch > MOTION_THRESHOLD_PITCH)
           {
-            Serial.println("dpitch baseline calibration");
-            resetBaseline();
+            globalMotion.pitch = true;
+            Serial.printf("Motion dpitch = %.4f  \n", dpitch);
           }
-          globalMotion.pitch = true;
-          lastMoved_timestamp = millis();
-          Serial.printf("Motion dpitch = %.4f \n", dpitch);
+          if (globalMotion)
+          {
+            lastMoved_timestamp = millis();
+            if (droll > 1 || dpitch > 1 || dyaw > 1 || dax > 0.1f || day > 0.1f || daz > 0.1f)
+            {
+              if (calibrationDebounce++ > 15)
+              {
+                resetBaseline();
+              }
+            }
+            motionAfterBaselineCounter++;
+            // delay(50);
+          }
+          else
+          {
+            if (motionAfterBaselineCounter > 0)
+              motionAfterBaselineCounter--;
+          }
+          xSemaphoreGive(getterSem);
         }
-        if (globalMotion)
-        {
-          motionAfterBaselineCounter++;
-          delay(50);
-        }
-        else 
-        {
-          motionAfterBaselineCounter = 0;
-        }
-        /*Serial.printf(" ax=%.4f, ay=%.4f, az=%.4f, yaw=%.4f, pit=%.4f, rol=%.4f ",
-                      globalmotiondata.accel_g[0][0], globalmotiondata.accel_g[0][1], globalmotiondata.accel_g[0][2],
-                      globalmotiondata.roll[0], globalmotiondata.pitch[0], globalmotiondata.roll[0]);*/
         xSemaphoreGive(imuDataSemaphore);
-        /*Serial.printf(" dax=%.4f, day=%.4f, daz=%.4f, dyaw=%.4f, dptch=%.4f, drol=%.4f \n",
-                      dax, day, daz, droll, dpitch, droll);*/
       }
-      delay(30);
+      delay(50);
     }
     vTaskDelete(NULL);
   }
@@ -456,44 +448,60 @@ namespace imu6500_dmp
     return true;
   }
 
-  uint64_t get_last_baseline_reset()
+  uint64_t get_baseline_last_reset()
   {
-    return last_baseline_reset;
+    return baseline.last_reset;
   }
 
   void resetBaseline()
   {
-    baseline_ready = false;
+    baseline.ready = false;
     motionAfterBaselineCounter = 0;
   }
 
   uint64_t getLastMovedTimestamp()
   {
-    xSemaphoreTake(imuDataSemaphore, pdMS_TO_TICKS(10));
+    xSemaphoreTake(getterSem, pdMS_TO_TICKS(30));
     uint64_t ts = lastMoved_timestamp;
-    xSemaphoreGive(imuDataSemaphore);
+    xSemaphoreGive(getterSem);
     return ts;
   }
   // Exposed function to report motion. Returns true once if motion detected since last call.
   MotionDtect_t imu_get_moved()
   { // Atomically consume the flag
-    xSemaphoreTake(imuDataSemaphore, pdMS_TO_TICKS(10));
+    xSemaphoreTake(getterSem, pdMS_TO_TICKS(30));
     MotionDtect_t str = globalMotion;
-    globalMotion.reset();
-    xSemaphoreGive(imuDataSemaphore);
+    xSemaphoreGive(getterSem);
     return str;
   }
 
-  bool SetWakeOnMotionThresh(float motion_thresh_mg)
+  bool SetWakeOnMotionThresh()
   {
-    bool ret = false;
-    auto res = xSemaphoreTake(wireMutex, pdMS_TO_TICKS(100));
-    if (res == pdTRUE)
+    bool ret = true;
+    Preferences imuPref;
+    imuPref.begin("imu", true);
+    MOTION_THRESHOLD_GX = imuPref.getFloat("M_TH_GX", MOTION_THRESHOLD_GX);
+    MOTION_THRESHOLD_GY = imuPref.getFloat("M_TH_GY", MOTION_THRESHOLD_GY);
+    MOTION_THRESHOLD_GZ = imuPref.getFloat("M_TH_GZ", MOTION_THRESHOLD_GZ);
+    MOTION_THRESHOLD_ROLL = imuPref.getFloat("M_TH_ROLL", MOTION_THRESHOLD_ROLL);
+    MOTION_THRESHOLD_YAW = imuPref.getFloat("M_TH_YAW", MOTION_THRESHOLD_YAW);
+    MOTION_THRESHOLD_PITCH = imuPref.getFloat("M_TH_PITCH", MOTION_THRESHOLD_PITCH);
+    WOM_DET_THRESH = imuPref.getFloat("WOM_THR", WOM_DET_THRESH);
+    imuPref.end();
+    if (imu_dmp_loop)
     {
-      ret = (mpu6500_set_Motion_thresh(motion_thresh_mg) == 0);
-      Serial.println("wom updated in MPU ");
-      xSemaphoreGive(wireMutex);
+      auto res = xSemaphoreTake(wireMutex, pdMS_TO_TICKS(100));
+      if (res == pdTRUE)
+      {
+        ret = (mpu6500_set_Motion_thresh(WOM_DET_THRESH) == 0);
+        Serial.println("wom updated in MPU ");
+        xSemaphoreGive(wireMutex);
+      }
     }
     return ret;
+  }
+  baseline_t getbaseline()
+  {
+    return baseline;
   }
 }

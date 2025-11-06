@@ -2,8 +2,8 @@
 
 namespace modem
 {
-    const String mqtt_server = "mqtt.example.com";
-    const int mqtt_port = 1883;
+    const String mqtt_server0 = "mqtt.example.com";
+    const int mqtt_port0 = 1883;
     bool MqttIsConnect()
     {
         modem7080g.sendAT("+SMSTATE?");
@@ -179,7 +179,7 @@ namespace modem
         modem7080g.sendAT("+SMDISC");
         modem7080g.waitResponse();
         char buffer[1024];
-        snprintf(buffer, 1024, "+SMCONF=\"URL\",\"%s\",%d", mqtt_server.c_str(), mqtt_port);
+        snprintf(buffer, 1024, "+SMCONF=\"URL\",\"%s\",%d", mqtt_server0.c_str(), mqtt_port0);
         modem7080g.sendAT(buffer);
         if (modem7080g.waitResponse() != 1)
         {
