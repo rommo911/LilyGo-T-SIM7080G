@@ -15,6 +15,7 @@
 #include "modem/modem.hpp"
 #include "sdcard/sdcard.h"
 #include <atomic>
+
 namespace power
 {
 
@@ -444,14 +445,17 @@ namespace power
         // Configure wakeup source: IMU interrupt pin
         fast_led::stop_led(0);
         mqttLogger.println("Entering deep sleep mode with IMU and PMU wakeup");
+        PMU.setChargingLedMode(XPOWERS_CHG_LED_OFF);
         detachInterrupt(PMU_INPUT_PIN);
         detachInterrupt(MOTION_INTRRUPT_PIN);
         rtc_gpio_hold_en(MOTION_INTRRUPT_PIN);
         rtc_gpio_hold_en(PMU_INPUT_PIN_);
+        rtc_gpio_hold_en(CAM_PIN);
         uint64_t wakeup_mask = (1ULL << MOTION_INTRRUPT_PIN) | (1ULL << PMU_INPUT_PIN);
-        mqttLogger.printf("Going to sleep now with mask %s ", String(wakeup_mask,BIN).c_str());
+        String str = "Going to sleep now with mask  " + String(wakeup_mask, BIN);
+        mqttLogger.printf(str.c_str());
         ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup_io(wakeup_mask, ESP_EXT1_WAKEUP_ANY_LOW));
-        fast_led::set_solid(0, {10, 10, 0}); // turn off led before sleep
+        fast_led::set_solid(0, {0, 0, 10}); // turn off led before sleep
         delay(500);
         esp_deep_sleep_start();
     }
@@ -461,13 +465,36 @@ namespace power
         fast_led::stop_led(0);
         mqttLogger.println("Entering deep sleep mode with PMU wakeup");
         // Configure wakeup source: IMU interrupt pin
+        PMU.setChargingLedMode(XPOWERS_CHG_LED_OFF);
         detachInterrupt(PMU_INPUT_PIN);
         detachInterrupt(MOTION_INTRRUPT_PIN);
+        rtc_gpio_hold_en(CAM_PIN);
         uint64_t wakeup_mask = (1ULL << PMU_INPUT_PIN);
-        mqttLogger.printf("Going to sleep now with mask %s ", String(wakeup_mask,BIN).c_str());
+        String str = "Going to sleep now with mask  " + String(wakeup_mask, BIN);
+        mqttLogger.printf(str.c_str());
         ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup_io(wakeup_mask, ESP_EXT1_WAKEUP_ANY_LOW));
+        fast_led::set_solid(0, {5, 0, 0}); // turn off led before sleep
+        delay(250);
+        esp_deep_sleep_start();
+    }
+
+    void DeepSleepWith_Timer_Wake(uint32_t ms)
+    {
+        fast_led::stop_led(0);
+        mqttLogger.println("Entering deep sleep mode with timer PMU wakeup");
+        // Configure wakeup source: IMU interrupt pin
+        PMU.setChargingLedMode(XPOWERS_CHG_LED_OFF);
+        detachInterrupt(PMU_INPUT_PIN);
+        detachInterrupt(MOTION_INTRRUPT_PIN);
+        rtc_gpio_hold_en(CAM_PIN);
+        uint64_t wakeup_mask = (1ULL << PMU_INPUT_PIN);
+        String str = "Going to sleep now with mask " + String(wakeup_mask, BIN) + String(ms);
+        mqttLogger.printf(str.c_str());
+        ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup_io(wakeup_mask, ESP_EXT1_WAKEUP_ANY_LOW));
+        ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(1000 * ms));
         fast_led::set_solid(0, {10, 0, 0}); // turn off led before sleep
-        delay(500);
+        fast_led::set_solid(1, {0, 10, 0}); // turn off led before sleep
+        delay(250);
         esp_deep_sleep_start();
     }
 
@@ -478,22 +505,41 @@ namespace power
         {
             return wakeUpReason;
         }
-        uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
-
-        wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
-        if (wakeup_pin_mask & ((uint64_t)1 << MOTION_INTRRUPT_PIN))
+        auto cause = esp_sleep_get_wakeup_cause();
+        switch (cause)
         {
-            Serial.println(F("Wakeup cause detected: MPU motion interrupt"));
-            wakeUpReason = WakeUpReason::MOTION;
+        case ESP_SLEEP_WAKEUP_EXT1:
+        {
+            uint64_t wakeup_pin_mask = esp_sleep_get_ext1_wakeup_status();
+            if (wakeup_pin_mask & ((uint64_t)1 << MOTION_INTRRUPT_PIN))
+            {
+                Serial.println("Wakeup cause detected: MPU motion interrupt");
+                wakeUpReason = WakeUpReason::MOTION;
+                break;
+            }
+            if (wakeup_pin_mask & ((uint64_t)1 << PMU_INPUT_PIN))
+            {
+                Serial.println("Wakeup cause detected: PMU interrupt");
+                wakeUpReason = WakeUpReason::START;
+                break;
+            }
+            else
+            {
+                Serial.printf("Wakeup cause detected: 0x%llx\n", wakeup_pin_mask);
+                break;
+            }
         }
-        if (wakeup_pin_mask & ((uint64_t)1 << PMU_INPUT_PIN))
+        case ESP_SLEEP_WAKEUP_TIMER:
         {
-            Serial.println(F("Wakeup cause detected: Start button"));
-            wakeUpReason = WakeUpReason::START;
+            wakeUpReason = WakeUpReason::TIMER;
+            Serial.println("Wakeup cause detected: TIMER");
+            break;
         }
-        else
+        default:
         {
-            Serial.printf(F("Wakeup cause detected: 0x%llx\n"), wakeup_pin_mask);
+            wakeUpReason = WakeUpReason::UNKNOWN;
+            break;
+        }
         }
         return wakeUpReason;
     }

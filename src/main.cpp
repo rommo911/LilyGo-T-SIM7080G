@@ -25,12 +25,6 @@ bool simulatedCriticalLowPowerTrigger = false;
 
 static uint64_t LastWifiOnTimestamp = 0;
 
-static uint32_t WifiTimeout = 1000U * 60U * 5U;  //
-static uint32_t No_MotionTimeout = 10U * 1000U;  //
-static uint32_t SecureModeTimeout = 10U * 1000U; //
-
-static bool SecureMode = false;
-
 static uint32_t RTC_DATA_ATTR motionCounter;
 
 static imu6500_dmp::MotionDtect_t motionInfo = {};
@@ -47,51 +41,28 @@ static inline bool NoVbusSince(const uint32_t timeout)
     return (millis() - power::getLastVbusRemovedTs() > timeout);
 }
 
-void loadTimingPref()
-{
-    Preferences pref;
-    pref.begin("timing", true);
-    WifiTimeout = pref.getInt("wifitm", WifiTimeout);                  //
-    No_MotionTimeout = pref.getInt("nomotiontm", No_MotionTimeout);    //
-    SecureModeTimeout = pref.getInt("securmodetm", SecureModeTimeout); //
-    mqttLogger.printf(" timing wifitm %d , nomotiontm %d , securmodetm %d \n", WifiTimeout, No_MotionTimeout, SecureModeTimeout);
-}
-
 void setup()
 {
     bool ret = false;
     Serial.begin(115200);
-    Serial.setTxBufferSize(512);
+    // Serial.setTxBufferSize(512);
     uint8_t counter = 0;
     power::setupPower();
     fast_led::fast_led_init();
     pinMode(CAM_PIN, OUTPUT);
     turnOnCamera();
+    loadTimingPref();
     if (power::isPowerVBUSOn())
     {
         StartWifi();
+        LastWifiOnTimestamp = millis();
         while (!Serial && counter++ < 20)
         {
             delay(200);
         };
     }
-    loadTimingPref();
     modem::shutdownModem();
     // delay(2000);
-    if (imu6500_dmp::imu_setup())
-    {
-        mqttLogger.println("IMU setup complete ");
-    }
-    else
-    {
-        mqttLogger.println("IMU setup failed ");
-        fast_led::start_blink(0, CRGB::Red);
-        delay(5000);
-        fast_led::stop_led(0);
-        delay(50);
-        ESP.restart();
-    }
-    setCpuFrequencyMhz(80);
 
     /*bool modRet = modem::initModem7080();
     if (modRet)
@@ -107,6 +78,11 @@ void setup()
     {
         mqttLogger.println("wake FROM MOTION");
         fast_led::start_blink(0, CRGB::Blue, CRGB::Black, 200, 200, 2);
+        delay(1500);
+        if (!power::isPowerVBUSOn())
+        {
+            power::DeepSleepWith_Timer_Wake(getNoMotionTimeout());
+        }
         break;
     }
     case power::WakeUpReason::START:
@@ -115,7 +91,14 @@ void setup()
         mqttLogger.println("wake FROM PMU");
         break;
     }
-
+    case power::WakeUpReason::TIMER:
+    {
+        fast_led::start_blink(1, {50, 50, 50}, CRGB::Black, 200, 200, 2);
+        mqttLogger.println("wake FROM Timer .. turn off Cam");
+        motionCounter++;
+        turnOffCamera();
+        break;
+    }
     default:
     {
         fast_led::start_blink(1, {50, 50, 0}, CRGB::Black, 200, 200, 2);
@@ -123,11 +106,25 @@ void setup()
         break;
     }
     }
+    setCpuFrequencyMhz(80);
     delay(2000);
+    if (imu6500_dmp::imu_setup())
+    {
+        mqttLogger.println("IMU setup complete ");
+    }
+    else
+    {
+        mqttLogger.println("IMU setup failed ");
+        fast_led::start_blink(0, CRGB::Red);
+        delay(5000);
+        fast_led::stop_led(0);
+        delay(50);
+        ESP.restart();
+    }
     if (!power::isPowerVBUSOn())
     {
         uint32_t now = millis();
-        while (imu6500_dmp::imu_get_moved() && ((millis() - now) > 30000U))
+        while (imu6500_dmp::imu_get_moved() && ((millis() - now) < 30000U) && !power::isPowerVBUSOn())
         {
             fast_led::set_solid(0, {50, 50, 50});
             delay(25);
@@ -166,8 +163,8 @@ void loopPowerCheck()
     }
 }
 
-bool waitForLeaveCar = true;
-bool waitForCarhelper = true;
+bool waitForLeaveCar = false;
+bool waitForCarhelper = false;
 
 void loopImuMotion()
 {
@@ -189,7 +186,7 @@ void loopImuMotion()
     if (waitForLeaveCar == true) // wait for timeout after vbus inserted (SecureModeTimeout)
     {
         // wait untill no motion for a while and Vbus removed for a while
-        if (NoMotionSince(No_MotionTimeout) && NoVbusSince(SecureModeTimeout))
+        if (NoMotionSince(getNoMotionTimeout()) && NoVbusSince(getSecureModeTimeout()))
         {
             turnOffCamera();
             fast_led::stop_led(0);
@@ -243,7 +240,7 @@ void loopImuMotion()
     }
     else
     {
-        if (NoMotionSince(No_MotionTimeout)) // no motion for 5s and car not started
+        if (NoMotionSince(getNoMotionTimeout())) // no motion for 5s and car not started
         {
             if (getCamIsON())
             {
@@ -264,13 +261,17 @@ void loopWifiStatus()
         if (!GetWifiOn())
         {
             StartWifi();
+            LastWifiOnTimestamp = millis();
         }
-        LastWifiOnTimestamp = millis();
     }
-    if (GetWifiOn() && (millis() - LastWifiOnTimestamp > WifiTimeout))
+    if (GetWifiOn())
+
     {
-        mqttLogger.println("WiFi on timeout reached, turning off WiFi");
-        StopWifi();
+        if (((millis() - LastWifiOnTimestamp > getWifiTimeout()) || (!power::isPowerVBUSOn() && power::isBatLowLevel())))
+        {
+            mqttLogger.println("WiFi on timeout reached, turning off WiFi");
+            StopWifi();
+        }
     }
 }
 

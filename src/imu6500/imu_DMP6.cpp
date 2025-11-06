@@ -55,6 +55,7 @@ namespace imu6500_dmp
   float MOTION_THRESHOLD_YAW = 0.5f;   // sensitivity: ~0.03 g (~0.3 m/s^2)
   float MOTION_THRESHOLD_PITCH = 0.5f; // sensitivity: ~0.03 g (~0.3 m/s^2)
   float WOM_DET_THRESH = 15.0f;
+  float WOM_DET_THRESH_SLEEP = 15.0f;
   // Motion detection state
   // Baseline linear acceleration (gravity removed) in g's
   static baseline_t baseline;
@@ -147,14 +148,11 @@ namespace imu6500_dmp
       vSemaphoreCreateBinary(imuDataSemaphore); // 400kHz I2C clock. Comment on this line if having compilation difficulties
       xSemaphoreGive(imuDataSemaphore);
     }
-    Preferences imuPref;
-    imuPref.begin("imu");
-    WOM_DET_THRESH = imuPref.getFloat("WOM_THR", WOM_DET_THRESH);
-    imuPref.end();
+    LoadImuPreferences();
     Serial.println(F("starting MPU6050 connection..."));
     if (mpu6500_dmp_init(MPU6500_INTERFACE_IIC,
                          MPU6500_ADDRESS_AD0_LOW,
-                         MPU_InterruptCallback, WOM_DET_THRESH, true) != 0)
+                         MPU_InterruptCallback, WOM_DET_THRESH_SLEEP, true) != 0)
     {
       Serial.println("MPU6050 connection failed");
       // External row needle, 1400~3700mV // external supply from pmu to header
@@ -165,7 +163,7 @@ namespace imu6500_dmp
       PMU.enableDC5();
       if (mpu6500_dmp_init(MPU6500_INTERFACE_IIC,
                            MPU6500_ADDRESS_AD0_LOW,
-                           MPU_InterruptCallback, WOM_DET_THRESH, true) != 0)
+                           MPU_InterruptCallback, WOM_DET_THRESH_SLEEP, true) != 0)
       {
         Serial.println("MPU6050 connection failed again ");
         return false;
@@ -177,7 +175,6 @@ namespace imu6500_dmp
     }
     detachInterrupt(MOTION_INTRRUPT_PIN);
     pinMode(MOTION_INTRRUPT_PIN, INPUT_PULLUP);
-    attachInterrupt(MOTION_INTRRUPT_PIN, IMUDataInterrupt, FALLING);
     return true;
   }
 
@@ -192,16 +189,7 @@ namespace imu6500_dmp
       vSemaphoreCreateBinary(imuDataSemaphore);
       xSemaphoreGive(imuDataSemaphore);
     }
-    Preferences imuPref;
-    imuPref.begin("imu", true);
-    MOTION_THRESHOLD_GX = imuPref.getFloat("M_TH_GX", MOTION_THRESHOLD_GX);
-    MOTION_THRESHOLD_GY = imuPref.getFloat("M_TH_GY", MOTION_THRESHOLD_GY);
-    MOTION_THRESHOLD_GZ = imuPref.getFloat("M_TH_GZ", MOTION_THRESHOLD_GZ);
-    MOTION_THRESHOLD_ROLL = imuPref.getFloat("M_TH_ROLL", MOTION_THRESHOLD_ROLL);
-    MOTION_THRESHOLD_YAW = imuPref.getFloat("M_TH_YAW", MOTION_THRESHOLD_YAW);
-    MOTION_THRESHOLD_PITCH = imuPref.getFloat("M_TH_PITCH", MOTION_THRESHOLD_PITCH);
-    WOM_DET_THRESH = imuPref.getFloat("WOM_THR", WOM_DET_THRESH);
-    imuPref.end();
+    LoadImuPreferences();
     uint8_t counter = 0;
     /*Verify connection*/
     Serial.println(F("starting MPU6050 connection..."));
@@ -475,9 +463,8 @@ namespace imu6500_dmp
     return str;
   }
 
-  bool SetWakeOnMotionThresh()
+  bool LoadImuPreferences()
   {
-    bool ret = true;
     Preferences imuPref;
     imuPref.begin("imu", true);
     MOTION_THRESHOLD_GX = imuPref.getFloat("M_TH_GX", MOTION_THRESHOLD_GX);
@@ -487,7 +474,14 @@ namespace imu6500_dmp
     MOTION_THRESHOLD_YAW = imuPref.getFloat("M_TH_YAW", MOTION_THRESHOLD_YAW);
     MOTION_THRESHOLD_PITCH = imuPref.getFloat("M_TH_PITCH", MOTION_THRESHOLD_PITCH);
     WOM_DET_THRESH = imuPref.getFloat("WOM_THR", WOM_DET_THRESH);
+    WOM_DET_THRESH_SLEEP = imuPref.getFloat("WOM_THR_S", WOM_DET_THRESH_SLEEP);
     imuPref.end();
+    return true;
+  }
+  bool SetWakeOnMotionThresh()
+  {
+    bool ret = true;
+    LoadImuPreferences();
     if (imu_dmp_loop)
     {
       auto res = xSemaphoreTake(wireMutex, pdMS_TO_TICKS(100));

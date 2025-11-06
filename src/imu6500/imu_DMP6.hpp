@@ -38,6 +38,8 @@ namespace imu6500_dmp
     bool ready = false;
     uint64_t last_reset = 0;
   }baseline_t;
+  
+  bool LoadImuPreferences();
 
   bool imu_setup();
   bool imu_WakeOnMotion_LowPwer_setup();

@@ -11,4 +11,12 @@ uint64_t getLastCamOnTs();
 uint64_t getLastCamOffTs();
 
 void loadTimingPref();
+
+uint32_t getWifiTimeout();
+
+uint32_t getNoMotionTimeout();
+
+uint32_t getSecureModeTimeout();
+
+
 #endif // MAIN_H_

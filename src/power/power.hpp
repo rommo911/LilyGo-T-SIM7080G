@@ -17,7 +17,9 @@ namespace power
     {
         MOTION = 0,
         START = 1,
-        UNKNOWN = 2
+        TIMER = 2,
+        RESTART = 3,
+        UNKNOWN
     };
     bool setupPower();
     esp_sleep_wakeup_cause_t getWakeupReason();
@@ -33,6 +35,7 @@ namespace power
     void DeepSleepWith_PMU_Wake();
     uint64_t getLastVbusInsertedTs();
     uint64_t getLastVbusRemovedTs();
+    void DeepSleepWith_Timer_Wake(uint32_t ms);
 
 };
 
