@@ -5,7 +5,7 @@ typedef struct
     float a0, a1, a2, b1, b2;
     float z1, z2;
 } Biquad_t;
-extern  Biquad_t bp_filter ;
+extern Biquad_t bp_filter;
 // ----------------- Helper functions -----------------
 
 // Compute biquad coefficients (bandpass, butterworth-like) using bilinear transform
@@ -24,3 +24,5 @@ float energy_rms_last(int N);
 // Rotate sensor accel into world frame using quaternion
 // sensor a_sensor (g) -> a_world (g)
 void rotate_accel_world(const float q[4], const float a_sensor[3], float a_world[3]);
+
+float angleDiff(float a, float b);

@@ -274,7 +274,6 @@ namespace fs
     float yaw = imuPref.getFloat("M_TH_YAW", 0.5f);
     float pitch = imuPref.getFloat("M_TH_PITCH", 0.5f);
     float wom = imuPref.getFloat("WOM_THR", 15);
-    float woms = imuPref.getFloat("WOM_THR_S", 15);
     imuPref.end();
 
     String jsonResponse = "{";
@@ -284,7 +283,6 @@ namespace fs
     jsonResponse += "\"M_TH_ROLL\":" + String(roll, 2) + ",";
     jsonResponse += "\"M_TH_YAW\":" + String(yaw, 2) + ",";
     jsonResponse += "\"M_TH_PITCH\":" + String(pitch, 2) + ",";
-    jsonResponse += "\"WOM_THR_S\":" + String(woms, 2) + ",";
     jsonResponse += "\"WOM_THR\":" + String(wom, 2);
     jsonResponse += "}";
 
@@ -325,8 +323,6 @@ namespace fs
         imuPref.putFloat("M_TH_PITCH", (float)doc["M_TH_PITCH"]);
       if (doc["WOM_THR"].is<float>())
         imuPref.putFloat("WOM_THR", (float)doc["WOM_THR"]);
-      if (doc["WOM_THR_S"].is<float>())
-        imuPref.putFloat("WOM_THR_S", (float)doc["WOM_THR_S"]);
 
       // update live IMU wake-on-motion threshold
       imuPref.end();

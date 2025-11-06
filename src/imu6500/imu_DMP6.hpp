@@ -27,6 +27,13 @@ namespace imu6500_dmp
     }
   } MotionDtect_t;
 
+  enum imuSetupType
+  {
+    DMP,
+    WOM,
+    NA
+  };
+
    typedef struct baseline_t
   {
     float ax = 0.0f;
@@ -41,8 +48,7 @@ namespace imu6500_dmp
   
   bool LoadImuPreferences();
 
-  bool imu_setup();
-  bool imu_WakeOnMotion_LowPwer_setup();
+  bool imu_setup(imuSetupType st);
   MotionDtect_t imu_get_moved();
   uint64_t getLastMovedTimestamp();
   void resetBaseline();

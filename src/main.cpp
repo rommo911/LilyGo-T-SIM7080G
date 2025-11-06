@@ -41,74 +41,30 @@ static inline bool NoVbusSince(const uint32_t timeout)
     return (millis() - power::getLastVbusRemovedTs() > timeout);
 }
 
+void CheckMotionCount()
+{
+    if (motionCounter > 0)
+    {
+        motionCounter = 0;
+        fast_led::start_blink(1, {50, 50, 50}, CRGB::Red, 250, 150, 5);
+        delay(5000);
+    }
+}
+
 void setup()
 {
     bool ret = false;
+    setCpuFrequencyMhz(80);
     Serial.begin(115200);
+    WiFi.mode(WIFI_OFF);
     // Serial.setTxBufferSize(512);
-    uint8_t counter = 0;
     power::setupPower();
     fast_led::fast_led_init();
+    fast_led::set_solid(0, {0, 0, 50});
     pinMode(CAM_PIN, OUTPUT);
     turnOnCamera();
     loadTimingPref();
-    if (power::isPowerVBUSOn())
-    {
-        StartWifi();
-        LastWifiOnTimestamp = millis();
-        while (!Serial && counter++ < 20)
-        {
-            delay(200);
-        };
-    }
-    modem::shutdownModem();
-    // delay(2000);
-
-    /*bool modRet = modem::initModem7080();
-    if (modRet)
-    {
-        modem::setRF(false);
-        modem::SetGPS(true);
-    }*/
-    fast_led::set_solid(0, {0, 0, 50});
-    wu = power::Get_wake_reason();
-    switch (wu)
-    {
-    case power::WakeUpReason::MOTION:
-    {
-        mqttLogger.println("wake FROM MOTION");
-        fast_led::start_blink(0, CRGB::Blue, CRGB::Black, 200, 200, 2);
-        delay(1500);
-        if (!power::isPowerVBUSOn())
-        {
-            power::DeepSleepWith_Timer_Wake(getNoMotionTimeout());
-        }
-        break;
-    }
-    case power::WakeUpReason::START:
-    {
-        fast_led::start_blink(1, CRGB::Green, CRGB::Black, 200, 200, 2);
-        mqttLogger.println("wake FROM PMU");
-        break;
-    }
-    case power::WakeUpReason::TIMER:
-    {
-        fast_led::start_blink(1, {50, 50, 50}, CRGB::Black, 200, 200, 2);
-        mqttLogger.println("wake FROM Timer .. turn off Cam");
-        motionCounter++;
-        turnOffCamera();
-        break;
-    }
-    default:
-    {
-        fast_led::start_blink(1, {50, 50, 0}, CRGB::Black, 200, 200, 2);
-        mqttLogger.println("wake FROM unknwon");
-        break;
-    }
-    }
-    setCpuFrequencyMhz(80);
-    delay(2000);
-    if (imu6500_dmp::imu_setup())
+    if (imu6500_dmp::imu_setup(imu6500_dmp::WOM))
     {
         mqttLogger.println("IMU setup complete ");
     }
@@ -121,16 +77,71 @@ void setup()
         delay(50);
         ESP.restart();
     }
-    if (!power::isPowerVBUSOn())
+    delay(100); // wait for imu
+    if (power::isPowerVBUSOn())
     {
-        uint32_t now = millis();
-        while (imu6500_dmp::imu_get_moved() && ((millis() - now) < 30000U) && !power::isPowerVBUSOn())
+        StartWifi();
+        LastWifiOnTimestamp = millis();
+        uint8_t counter = 0;
+        while (!Serial && counter++ < 20)
         {
-            fast_led::set_solid(0, {50, 50, 50});
-            delay(25);
-        }
-        fast_led::stop_led(0);
+            delay(100);
+        };
+        delay(500);
+        mqttLogger.println("wake FROM PMU");
     }
+    else
+    {
+        wu = power::Get_wake_reason();
+        switch (wu)
+        {
+        case power::WakeUpReason::UNKNOWN:
+        {
+            motionCounter = 0;
+            break;
+        }
+        case power::WakeUpReason::MOTION:
+        {
+            mqttLogger.println("wake FROM MOTION");
+            fast_led::start_blink(0, {0, 0, 100}, CRGB::Black, 200, 200, 2);
+            delay(2200);
+            if (!power::isPowerVBUSOn() && (!imu6500_dmp::imu_get_moved()))
+            {
+                fast_led::set_solid(0, {0, 10, 0});
+                fast_led::set_solid(1, {10, 0, 0});
+                power::DeepSleepWith_IMU_Timer_Wake(getNoMotionTimeout());
+            }
+            break;
+        }
+        case power::WakeUpReason::TIMER:
+        {
+            fast_led::start_blink(0, {50, 50, 50}, CRGB::Black, 200, 200, 1);
+            delay(1000);
+            if (!imu6500_dmp::imu_get_moved() && !power::isPowerVBUSOn())
+            {
+                mqttLogger.println("wake FROM Timer .. turn off Cam");
+                motionCounter++;
+                turnOffCamera();
+                imu6500_dmp::imu_setup(imu6500_dmp::WOM);
+                if (power::isBatLowLevel())
+                    fast_led::set_solid(0, {5, 0, 0}); // turn off led before sleep
+                else
+                    fast_led::set_solid(0, {0, 0, 5}); // turn off led before sleep
+
+                fast_led::stop_led(1); // turn off led before sleep
+                power::DeepSleepWith_IMU_PMU_Wake();
+            }
+
+            break;
+        }
+        default:
+        {
+            mqttLogger.println("wake FROM unknwon");
+            break;
+        }
+        }
+    }
+    CheckMotionCount();
 }
 
 void loopPowerCheck()
@@ -138,119 +149,54 @@ void loopPowerCheck()
     if (power::isPowerVBUSOn())
     {
         const uint8_t percent = power::getPMU().getBatteryPercent();
-        fast_led::set_solid(0, batteryColor(percent));
+        fast_led::set_solid(1, batteryColor(percent));
         if (!simulatedLowPowerTrigger && !simulatedCriticalLowPowerTrigger)
             return;
     }
     if (power::isBatCriticalLevel() || simulatedCriticalLowPowerTrigger)
     {
-        mqttLogger.printf("Battery critical level detected in main loop %d - %d \n", power::isBatCriticalLevel() ? 1 : 0, simulatedCriticalLowPowerTrigger ? 1 : 0);
-        simulatedCriticalLowPowerTrigger = false;
-        modem::shutdownModem();
-        sdcard::shutdownSdcard();
-        imu6500_dmp::shutdown();
-        power::DeepSleepWith_PMU_Wake();
+        mqttLogger.printf("Battery critical level detected in main loop \n");
+        delay(100);
+        power::getPMU().shutdown();
     }
     if (power::isBatLowLevel() || simulatedLowPowerTrigger)
     {
         simulatedLowPowerTrigger = false;
         mqttLogger.printf("Battery low level detected in main loop %d - %d \n", power::isBatLowLevel() ? 1 : 0, simulatedLowPowerTrigger ? 1 : 0);
-        imu6500_dmp::shutdown();
-        modem::shutdownModem();
-        sdcard::shutdownSdcard();
-        imu6500_dmp::imu_WakeOnMotion_LowPwer_setup();
+        fast_led::set_solid(0, {5, 0, 0}); // turn off led before sleep
+        fast_led::stop_led(1);             // turn off led before sleep
+        delay(30);
         power::DeepSleepWith_IMU_PMU_Wake();
     }
 }
 
-bool waitForLeaveCar = false;
 bool waitForCarhelper = false;
-
 void loopImuMotion()
 {
-    motionInfo = imu6500_dmp::imu_get_moved();
-    bool _motionTriggered = motionInfo || simulatedMotionTrigger;
-    simulatedMotionTrigger = false;
     if (power::isPowerVBUSOn())
     {
-        if (motionCounter > 0)
-        {
-            fast_led::start_blink(0, CRGB::Blue, CRGB::Black, 150, 150, 5);
-            delay(500);
-            motionCounter = 0;
-        }
-        waitForLeaveCar = true;
         waitForCarhelper = true;
         return;
     }
-    if (waitForLeaveCar == true) // wait for timeout after vbus inserted (SecureModeTimeout)
+    // wait untill no motion for a while and Vbus removed for a while
+    if (NoMotionSince(getNoMotionTimeout()) && NoVbusSince(getSecureModeTimeout()) && !GetWifiOn())
     {
-        // wait untill no motion for a while and Vbus removed for a while
-        if (NoMotionSince(getNoMotionTimeout()) && NoVbusSince(getSecureModeTimeout()))
-        {
-            turnOffCamera();
-            fast_led::stop_led(0);
-            waitForLeaveCar = false; // exit this mode and start watching out for motion
-            mqttLogger.println("startin secure mode");
-        }
-        else
-        {
-            if (waitForCarhelper) // only once
-            {
-                const uint8_t percent = power::getPMU().getBatteryPercent();
-                CRGB rgb = batteryColor(percent);
-                fast_led::start_blink(0, rgb, CRGB::Black, 350, 2500, 120); // crete blink patter to inform user its waiting
-                waitForCarhelper = false;
-                mqttLogger.println("waiting for some time after vbus removed");
-            }
-        }
-        return;
-    }
-
-    if (_motionTriggered)
-    {
-        mqttLogger.println("carlog/isntantMotion", "Loop Motion detected ");
-
-        if (getCamIsON() == false)
-        {
-            mqttLogger.println("carlog/motion", "started cam ");
-            turnOnCamera();
-            fast_led::start_blink(0, {0, 15, 0}, {50, 0, 0}, 1250, 100);
-        }
-        if (motionInfo.motionInterrupt)
-        {
-            if (imu6500_dmp::getbaseline().ready)
-            {
-                fast_led::start_blink(1, {0, 0, 100}, CRGB::Black, 40, 1500, 1);
-            }
-            else
-            {
-                fast_led::start_blink(1, {30, 30, 30}, CRGB::Black, 40, 1500, 1);
-            }
-        }
-        else if (motionInfo.yaw || motionInfo.pitch || motionInfo.roll)
-        {
-            fast_led::start_blink(1, {100, 0, 0}, CRGB::Black, 40, 1500, 1);
-        }
-        else
-        {
-            fast_led::start_blink(1, {0, 50, 50}, CRGB::Black, 40, 1500, 1);
-        }
-        delay(50);
+        mqttLogger.println("starting secure mode");
+        turnOffCamera();
+        fast_led::set_solid(0, {0, 0, 5}); // turn off led before sleep
+        fast_led::stop_led(1);             // turn off led before sleep            modem::shutdownModem();
+        power::DeepSleepWith_IMU_PMU_Wake();
     }
     else
     {
-        if (NoMotionSince(getNoMotionTimeout())) // no motion for 5s and car not started
+        if (waitForCarhelper) // only once
         {
-            if (getCamIsON())
-            {
-                mqttLogger.println("carlog/motion", "stopped cam ");
-                turnOffCamera();
-                motionCounter++;
-                fast_led::start_blink(0, {5, 0, 0}, {0, 0, 0}, 100, 3500);
-            }
+            fast_led::start_blink(0, batteryColor(power::getPMU().getBatteryPercent()), CRGB::Black, 200, 2500); // crete blink patter to inform user its waiting
+            waitForCarhelper = false;
+            mqttLogger.println("waiting for some time after vbus removed");
         }
     }
+    return;
 }
 
 void loopWifiStatus()
@@ -260,12 +206,12 @@ void loopWifiStatus()
         mqttLogger.println("Power key short pressed detected in main loop");
         if (!GetWifiOn())
         {
+            fast_led::start_blink(0, {0, 50, 50}, CRGB::Black, 200, 2500, 120); // crete blink patter to inform user its waiting
             StartWifi();
             LastWifiOnTimestamp = millis();
         }
     }
     if (GetWifiOn())
-
     {
         if (((millis() - LastWifiOnTimestamp > getWifiTimeout()) || (!power::isPowerVBUSOn() && power::isBatLowLevel())))
         {

@@ -18,7 +18,6 @@ namespace power
         MOTION = 0,
         START = 1,
         TIMER = 2,
-        RESTART = 3,
         UNKNOWN
     };
     bool setupPower();
@@ -35,8 +34,8 @@ namespace power
     void DeepSleepWith_PMU_Wake();
     uint64_t getLastVbusInsertedTs();
     uint64_t getLastVbusRemovedTs();
+    void DeepSleepWith_IMU_Timer_Wake(uint32_t ms);
     void DeepSleepWith_Timer_Wake(uint32_t ms);
-
 };
 
 // helper: map 0..100% to a red->yellow->green gradient

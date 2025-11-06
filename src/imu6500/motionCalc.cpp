@@ -109,7 +109,11 @@ float energy_rms_last(int N)
     }
     return sqrtf(sum / N);
 }
-
+float angleDiff(float a, float b)
+{
+    float d = fmodf(a - b + 540.0f, 360.0f) - 180.0f; // normalize to [-180,180)
+    return fabsf(d);
+}
 // Rotate sensor accel into world frame using quaternion
 // sensor a_sensor (g) -> a_world (g)
 void rotate_accel_world(const float q[4], const float a_sensor[3], float a_world[3])

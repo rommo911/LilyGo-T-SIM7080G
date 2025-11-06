@@ -42,7 +42,7 @@ namespace imu6500_dmp
   /*---MPU6050 Control/Status Variables---*/
   uint64_t lastMoved_timestamp = 0;
   /*---Orientation/Motion Variables---*/
-
+  imuSetupType ImuMode = NA;
   MotionDtect_t globalMotion = {};
   motion_t globalmotiondata = {};
   motion_t InterruptMotion = {};
@@ -55,12 +55,12 @@ namespace imu6500_dmp
   float MOTION_THRESHOLD_YAW = 0.5f;   // sensitivity: ~0.03 g (~0.3 m/s^2)
   float MOTION_THRESHOLD_PITCH = 0.5f; // sensitivity: ~0.03 g (~0.3 m/s^2)
   float WOM_DET_THRESH = 15.0f;
-  float WOM_DET_THRESH_SLEEP = 15.0f;
   // Motion detection state
   // Baseline linear acceleration (gravity removed) in g's
   static baseline_t baseline;
   float dax = 0.0f, day = 0.0f, daz = 0.0f, droll = 0.0f, dyaw = 0.0f, dpitch = 0.0f;
   float qf[4];
+  uint16_t calibrationDebounce = 0;
 
   uint16_t motionAfterBaselineCounter = 0;
 
@@ -68,25 +68,19 @@ namespace imu6500_dmp
 
   static bool imu_dmp_loop = false;
   SemaphoreHandle_t imuDataSemaphore, wireMutex, getterSem;
-  uint16_t calibrationDebounce = 0;
 
-  void imu_loop(void *arg);
 
-  /*------Interrupt detection routine------*/
+    /*------Interrupt detection routine------*/
   std::atomic<bool> IMUInterrupt{false};
   std::atomic<bool> MPU_DMP_DATA_READY{false};
   std::atomic<bool> MPU_MTION_Interrupt{false};
-  std::atomic<uint64_t> MPU_MTION_Interrupt_ts{0};
+  void imu_DMP_loop(void *arg);
+
+
 
   void IRAM_ATTR IMUDataInterrupt()
   {
     IMUInterrupt = true;
-  }
-
-  float angleDiff(float a, float b)
-  {
-    float d = fmodf(a - b + 540.0f, 360.0f) - 180.0f; // normalize to [-180,180)
-    return fabsf(d);
   }
 
   void imu_Interrupt_loop(void *arg)
@@ -116,10 +110,11 @@ namespace imu6500_dmp
     {
       // Serial.println("mpu6500: irq motion.");
       MPU_MTION_Interrupt = true;
-      MPU_MTION_Interrupt_ts = millis();
+      xSemaphoreTake(getterSem, pdMS_TO_TICKS(15));
       globalMotion.motionInterrupt = true;
       globalMotion.ts = millis();
       lastMoved_timestamp = millis();
+      xSemaphoreGive(getterSem);
       break;
     }
     case MPU6500_INTERRUPT_DMP:
@@ -141,44 +136,16 @@ namespace imu6500_dmp
     }
   }
 
-  bool imu_WakeOnMotion_LowPwer_setup()
+  bool shutdown()
   {
-    if (imuDataSemaphore == NULL)
-    {
-      vSemaphoreCreateBinary(imuDataSemaphore); // 400kHz I2C clock. Comment on this line if having compilation difficulties
-      xSemaphoreGive(imuDataSemaphore);
-    }
-    LoadImuPreferences();
-    Serial.println(F("starting MPU6050 connection..."));
-    if (mpu6500_dmp_init(MPU6500_INTERFACE_IIC,
-                         MPU6500_ADDRESS_AD0_LOW,
-                         MPU_InterruptCallback, WOM_DET_THRESH_SLEEP, true) != 0)
-    {
-      Serial.println("MPU6050 connection failed");
-      // External row needle, 1400~3700mV // external supply from pmu to header
-      auto &PMU = power::getPMU();
-      PMU.disableDC5();
-      delay(1000);
-      PMU.setDC5Voltage(3400);
-      PMU.enableDC5();
-      if (mpu6500_dmp_init(MPU6500_INTERFACE_IIC,
-                           MPU6500_ADDRESS_AD0_LOW,
-                           MPU_InterruptCallback, WOM_DET_THRESH_SLEEP, true) != 0)
-      {
-        Serial.println("MPU6050 connection failed again ");
-        return false;
-      }
-    }
-    else
-    {
-      Serial.println("MPU6050 connection successful");
-    }
-    detachInterrupt(MOTION_INTRRUPT_PIN);
-    pinMode(MOTION_INTRRUPT_PIN, INPUT_PULLUP);
+    Serial.println("imu shutdown...");
+    imu_dmp_loop = false;
+    vTaskDelay(pdMS_TO_TICKS(100));
+    mpu6500_dmp_deinit();
+    ImuMode = NA;
     return true;
   }
-
-  bool imu_setup()
+  bool imu_setup(imuSetupType st)
   {
     if (imuDataSemaphore == NULL)
     {
@@ -192,10 +159,15 @@ namespace imu6500_dmp
     LoadImuPreferences();
     uint8_t counter = 0;
     /*Verify connection*/
+    if (ImuMode != NA)
+    {
+      shutdown();
+    }
+    ImuMode = st;
     Serial.println(F("starting MPU6050 connection..."));
     if (mpu6500_dmp_init(MPU6500_INTERFACE_IIC,
                          MPU6500_ADDRESS_AD0_LOW,
-                         MPU_InterruptCallback, WOM_DET_THRESH, false) != 0)
+                         MPU_InterruptCallback, WOM_DET_THRESH, st != DMP) != 0)
     {
       Serial.println("MPU6050 connection failed");
       // External row needle, 1400~3700mV // external supply from pmu to header
@@ -206,9 +178,10 @@ namespace imu6500_dmp
       PMU.enableDC5();
       if (mpu6500_dmp_init(MPU6500_INTERFACE_IIC,
                            MPU6500_ADDRESS_AD0_LOW,
-                           MPU_InterruptCallback, WOM_DET_THRESH, false) != 0)
+                           MPU_InterruptCallback, WOM_DET_THRESH, st != DMP) != 0)
       {
         Serial.println("MPU6050 connection failed again ");
+        ImuMode = NA;
         return false;
       }
     }
@@ -221,8 +194,28 @@ namespace imu6500_dmp
     attachInterrupt(MOTION_INTRRUPT_PIN, IMUDataInterrupt, FALLING);
     imu_dmp_loop = true;
     xTaskCreate(imu_Interrupt_loop, "IMU", 8192, NULL, 1, NULL);
-    xTaskCreate(imu_loop, "IMUloop", 8192, NULL, 1, NULL);
+    if (st == DMP)
+    {
+      xTaskCreate(imu_DMP_loop, "IMUloop", 8192, NULL, 1, NULL);
+    }
     return true;
+  }
+
+  uint64_t getLastMovedTimestamp()
+  {
+    xSemaphoreTake(getterSem, pdMS_TO_TICKS(30));
+    uint64_t ts = lastMoved_timestamp;
+    xSemaphoreGive(getterSem);
+    return ts;
+  }
+  // Exposed function to report motion. Returns true once if motion detected since last call.
+  MotionDtect_t imu_get_moved()
+  { // Atomically consume the flag
+    xSemaphoreTake(getterSem, pdMS_TO_TICKS(30));
+    MotionDtect_t str = globalMotion;
+    globalMotion.reset();
+    xSemaphoreGive(getterSem);
+    return str;
   }
 
   bool waitforBaseline()
@@ -313,14 +306,56 @@ namespace imu6500_dmp
     return baseline.ready;
   }
 
-  void imu_loop(void *arg)
+  bool LoadImuPreferences()
   {
-    MPU_MTION_Interrupt_ts = millis();
+    Preferences imuPref;
+    imuPref.begin("imu", true);
+    MOTION_THRESHOLD_GX = imuPref.getFloat("M_TH_GX", MOTION_THRESHOLD_GX);
+    MOTION_THRESHOLD_GY = imuPref.getFloat("M_TH_GY", MOTION_THRESHOLD_GY);
+    MOTION_THRESHOLD_GZ = imuPref.getFloat("M_TH_GZ", MOTION_THRESHOLD_GZ);
+    MOTION_THRESHOLD_ROLL = imuPref.getFloat("M_TH_ROLL", MOTION_THRESHOLD_ROLL);
+    MOTION_THRESHOLD_YAW = imuPref.getFloat("M_TH_YAW", MOTION_THRESHOLD_YAW);
+    MOTION_THRESHOLD_PITCH = imuPref.getFloat("M_TH_PITCH", MOTION_THRESHOLD_PITCH);
+    WOM_DET_THRESH = imuPref.getFloat("WOM_THR", WOM_DET_THRESH);
+    imuPref.end();
+    return true;
+  }
+
+  bool SetWakeOnMotionThresh()
+  {
+    bool ret = true;
+    LoadImuPreferences();
+    if (imu_dmp_loop)
+    {
+      auto res = xSemaphoreTake(wireMutex, pdMS_TO_TICKS(250));
+      if (res == pdTRUE)
+      {
+        ret = (mpu6500_set_Motion_thresh(WOM_DET_THRESH) == 0);
+        Serial.println("wom updated in MPU ");
+        xSemaphoreGive(wireMutex);
+      }
+    }
+    return ret;
+  }
+
+  baseline_t getbaseline()
+  {
+    return baseline;
+  }
+
+  void resetBaseline()
+  {
+    baseline.ready = false;
+    motionAfterBaselineCounter = 0;
+  }
+  void imu_DMP_loop(void *arg)
+  {
+    lastMoved_timestamp = millis();
     baseline.last_reset = millis();
     Serial.println("Starting IMU DMP loop...");
     while (imu_dmp_loop)
     {
-      if (((millis()) > (MPU_MTION_Interrupt_ts + 1500)) && ((millis()) > (baseline.last_reset + 15000)) && (motionAfterBaselineCounter > 30))
+      if (((millis()) > (lastMoved_timestamp + 1500)) && ((millis()) > (baseline.last_reset + 15000)) && (motionAfterBaselineCounter > 30))
       {
         Serial.println("Periodic baseline calibration");
         Serial.flush();
@@ -339,9 +374,6 @@ namespace imu6500_dmp
       }
       if (MPU_DMP_DATA_READY)
       { // Get the Latest packet
-        xSemaphoreTake(getterSem, pdMS_TO_TICKS(30));
-        globalMotion.reset();
-        xSemaphoreGive(getterSem);
         MPU_DMP_DATA_READY = false;
         // // Compute delta from baseline
         xSemaphoreTake(imuDataSemaphore, pdMS_TO_TICKS(30));
@@ -369,13 +401,11 @@ namespace imu6500_dmp
           if (dax > MOTION_THRESHOLD_GX)
           {
             globalMotion.x = true;
-            lastMoved_timestamp = millis();
             Serial.printf("Motion  diff x= %.4f  \n", dax);
           }
           if (day > MOTION_THRESHOLD_GY)
           {
             globalMotion.y = true;
-            lastMoved_timestamp = millis();
             Serial.printf("Motion diff y = %.4f \n", day);
           }
           if (daz > MOTION_THRESHOLD_GZ)
@@ -425,77 +455,5 @@ namespace imu6500_dmp
       delay(50);
     }
     vTaskDelete(NULL);
-  }
-
-  bool shutdown()
-  {
-    Serial.println("imu shutdown...");
-    imu_dmp_loop = false;
-    vTaskDelay(pdMS_TO_TICKS(100));
-    mpu6500_dmp_deinit();
-    return true;
-  }
-
-  uint64_t get_baseline_last_reset()
-  {
-    return baseline.last_reset;
-  }
-
-  void resetBaseline()
-  {
-    baseline.ready = false;
-    motionAfterBaselineCounter = 0;
-  }
-
-  uint64_t getLastMovedTimestamp()
-  {
-    xSemaphoreTake(getterSem, pdMS_TO_TICKS(30));
-    uint64_t ts = lastMoved_timestamp;
-    xSemaphoreGive(getterSem);
-    return ts;
-  }
-  // Exposed function to report motion. Returns true once if motion detected since last call.
-  MotionDtect_t imu_get_moved()
-  { // Atomically consume the flag
-    xSemaphoreTake(getterSem, pdMS_TO_TICKS(30));
-    MotionDtect_t str = globalMotion;
-    xSemaphoreGive(getterSem);
-    return str;
-  }
-
-  bool LoadImuPreferences()
-  {
-    Preferences imuPref;
-    imuPref.begin("imu", true);
-    MOTION_THRESHOLD_GX = imuPref.getFloat("M_TH_GX", MOTION_THRESHOLD_GX);
-    MOTION_THRESHOLD_GY = imuPref.getFloat("M_TH_GY", MOTION_THRESHOLD_GY);
-    MOTION_THRESHOLD_GZ = imuPref.getFloat("M_TH_GZ", MOTION_THRESHOLD_GZ);
-    MOTION_THRESHOLD_ROLL = imuPref.getFloat("M_TH_ROLL", MOTION_THRESHOLD_ROLL);
-    MOTION_THRESHOLD_YAW = imuPref.getFloat("M_TH_YAW", MOTION_THRESHOLD_YAW);
-    MOTION_THRESHOLD_PITCH = imuPref.getFloat("M_TH_PITCH", MOTION_THRESHOLD_PITCH);
-    WOM_DET_THRESH = imuPref.getFloat("WOM_THR", WOM_DET_THRESH);
-    WOM_DET_THRESH_SLEEP = imuPref.getFloat("WOM_THR_S", WOM_DET_THRESH_SLEEP);
-    imuPref.end();
-    return true;
-  }
-  bool SetWakeOnMotionThresh()
-  {
-    bool ret = true;
-    LoadImuPreferences();
-    if (imu_dmp_loop)
-    {
-      auto res = xSemaphoreTake(wireMutex, pdMS_TO_TICKS(100));
-      if (res == pdTRUE)
-      {
-        ret = (mpu6500_set_Motion_thresh(WOM_DET_THRESH) == 0);
-        Serial.println("wom updated in MPU ");
-        xSemaphoreGive(wireMutex);
-      }
-    }
-    return ret;
-  }
-  baseline_t getbaseline()
-  {
-    return baseline;
   }
 }

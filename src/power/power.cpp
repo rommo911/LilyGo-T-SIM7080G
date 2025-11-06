@@ -11,14 +11,13 @@
 #include "pins.hpp"
 #include "power/power.hpp"
 #include "wifi/wifi.hpp"
-#include "fast_led/fast_led.hpp"
 #include "modem/modem.hpp"
 #include "sdcard/sdcard.h"
 #include <atomic>
+#include "driver/rtc_io.h"
 
 namespace power
 {
-
     esp_sleep_wakeup_cause_t wakeup_reason;
     std::atomic<bool> isCharging;
     std::atomic<bool> isVbusInserted;
@@ -53,16 +52,6 @@ namespace power
             return false;
         }
         pmuIrqEvent = xEventGroupCreate();
-
-        // If it is a power cycle, turn off the modem power. Then restart it
-        if (esp_sleep_get_wakeup_cause() == ESP_SLEEP_WAKEUP_UNDEFINED)
-        {
-            mqttLogger.println("it is a power cycle, restart modem ?");
-            // PMU.disableDC3();
-            //  Wait 200ms
-            delay(200);
-        }
-
         // Set VSY off voltage as 2600mV, Adjustment range 2600mV ~ 3300mV
         PMU.setSysPowerDownVoltage(3100);
 
@@ -166,19 +155,15 @@ namespace power
         // The following data is obtained from actual testing , Please see the description below for the test method.
         // 20% ~= 3.7v
         // 1%  ~= 3.4V
-        PMU.setLowBatWarnThreshold(8); // Set to trigger interrupt when reaching 5%
-                                       // Get the low voltage warning percentage setting
+        PMU.setLowBatWarnThreshold(15); // Set to trigger interrupt when reaching 5%
+                                        // Get the low voltage warning percentage setting
         PMU.enableInternalDischarge();
 
         // setLowBatShutdownThreshold Range:  0% ~ 15%
         // The following data is obtained from actual testing , Please see the description below for the test method.
         // 15% ~= 3.6v
         // 1%  ~= 3.4V
-        PMU.setLowBatShutdownThreshold(3); // Set to trigger interrupt when reaching 1%
-        // Get the default low voltage shutdown percentage setting
-        uint8_t low_shutdown_per = PMU.getLowBatShutdownThreshold();
-        mqttLogger.printf("Default low battery shutdown threshold is %d percentage\n", low_shutdown_per);
-        xTaskCreate(loopPower, "power", 4096, NULL, 1, NULL);
+        PMU.setLowBatShutdownThreshold(5); // Set to trigger interrupt when reaching 1%
 
         switch ((uint8_t)PMU.getBatteryPercent())
         {
@@ -210,8 +195,9 @@ namespace power
         {
             VbusRemovedTimestamp = millis();
         }
-        isBatteryCriticalLevel = PMU.getBatteryPercent() <= 3;
-        isBatteryLowLevel = PMU.getBatteryPercent() <= 8;
+        isBatteryCriticalLevel = PMU.getBatteryPercent() <= 5;
+        isBatteryLowLevel = PMU.getBatteryPercent() <= 15;
+        xTaskCreate(loopPower, "power", 4096, NULL, 1, NULL);
         return true;
     }
 
@@ -282,8 +268,8 @@ namespace power
         {
             auto event = xEventGroupWaitBits(pmuIrqEvent, 0b01, pdTRUE, pdTRUE, pdMS_TO_TICKS(10000));
             isVbusInserted = PMU.isVbusIn();
-            isBatteryCriticalLevel = (PMU.getBatteryPercent() <= 3U);
-            isBatteryLowLevel = (PMU.getBatteryPercent() <= 8U);
+            isBatteryCriticalLevel = PMU.getBatteryPercent() <= 5;
+            isBatteryLowLevel = PMU.getBatteryPercent() <= 15;
             if (event & 0b01)
             {
                 handleInterrupt();
@@ -414,22 +400,27 @@ namespace power
     {
         return VbusInsertTimestamp;
     }
+    
     bool isBattCharging()
     {
         return isCharging;
     }
+
     bool isPowerVBUSOn()
     {
         return isVbusInserted;
     }
+
     bool isBatLowLevel()
     {
         return isBatteryLowLevel;
     }
+
     bool isBatCriticalLevel()
     {
         return isBatteryCriticalLevel;
     }
+
     bool iskeyShortPressed()
     {
         if (isPekeyShortPressed)
@@ -439,11 +430,10 @@ namespace power
         }
         return false;
     }
-#include "driver/rtc_io.h"
+    
     void DeepSleepWith_IMU_PMU_Wake()
     {
         // Configure wakeup source: IMU interrupt pin
-        fast_led::stop_led(0);
         mqttLogger.println("Entering deep sleep mode with IMU and PMU wakeup");
         PMU.setChargingLedMode(XPOWERS_CHG_LED_OFF);
         detachInterrupt(PMU_INPUT_PIN);
@@ -455,14 +445,12 @@ namespace power
         String str = "Going to sleep now with mask  " + String(wakeup_mask, BIN);
         mqttLogger.printf(str.c_str());
         ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup_io(wakeup_mask, ESP_EXT1_WAKEUP_ANY_LOW));
-        fast_led::set_solid(0, {0, 0, 10}); // turn off led before sleep
-        delay(500);
+        delay(100);
         esp_deep_sleep_start();
     }
 
     void DeepSleepWith_PMU_Wake()
     {
-        fast_led::stop_led(0);
         mqttLogger.println("Entering deep sleep mode with PMU wakeup");
         // Configure wakeup source: IMU interrupt pin
         PMU.setChargingLedMode(XPOWERS_CHG_LED_OFF);
@@ -473,28 +461,43 @@ namespace power
         String str = "Going to sleep now with mask  " + String(wakeup_mask, BIN);
         mqttLogger.printf(str.c_str());
         ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup_io(wakeup_mask, ESP_EXT1_WAKEUP_ANY_LOW));
-        fast_led::set_solid(0, {5, 0, 0}); // turn off led before sleep
-        delay(250);
+        delay(100);
         esp_deep_sleep_start();
     }
 
-    void DeepSleepWith_Timer_Wake(uint32_t ms)
+    void DeepSleepWith_IMU_Timer_Wake(uint32_t ms)
     {
-        fast_led::stop_led(0);
         mqttLogger.println("Entering deep sleep mode with timer PMU wakeup");
         // Configure wakeup source: IMU interrupt pin
         PMU.setChargingLedMode(XPOWERS_CHG_LED_OFF);
         detachInterrupt(PMU_INPUT_PIN);
         detachInterrupt(MOTION_INTRRUPT_PIN);
+        rtc_gpio_hold_en(MOTION_INTRRUPT_PIN);
+        rtc_gpio_hold_en(PMU_INPUT_PIN_);
+        rtc_gpio_hold_en(CAM_PIN);
+        uint64_t wakeup_mask = (1ULL << MOTION_INTRRUPT_PIN) | (1ULL << PMU_INPUT_PIN);
+        String str = "Going to sleep now with mask " + String(wakeup_mask, BIN) + String(ms);
+        mqttLogger.printf(str.c_str());
+        esp_sleep_enable_ext1_wakeup_io(wakeup_mask, ESP_EXT1_WAKEUP_ANY_LOW);
+        esp_sleep_enable_timer_wakeup(1000 * ms);
+        esp_deep_sleep_start();
+    }
+
+        void DeepSleepWith_Timer_Wake(uint32_t ms)
+    {
+        mqttLogger.println("Entering deep sleep mode with timer PMU wakeup");
+        // Configure wakeup source: IMU interrupt pin
+        PMU.setChargingLedMode(XPOWERS_CHG_LED_OFF);
+        detachInterrupt(PMU_INPUT_PIN);
+        detachInterrupt(MOTION_INTRRUPT_PIN);
+        rtc_gpio_hold_en(MOTION_INTRRUPT_PIN);
+        rtc_gpio_hold_en(PMU_INPUT_PIN_);
         rtc_gpio_hold_en(CAM_PIN);
         uint64_t wakeup_mask = (1ULL << PMU_INPUT_PIN);
         String str = "Going to sleep now with mask " + String(wakeup_mask, BIN) + String(ms);
         mqttLogger.printf(str.c_str());
-        ESP_ERROR_CHECK(esp_sleep_enable_ext1_wakeup_io(wakeup_mask, ESP_EXT1_WAKEUP_ANY_LOW));
-        ESP_ERROR_CHECK(esp_sleep_enable_timer_wakeup(1000 * ms));
-        fast_led::set_solid(0, {10, 0, 0}); // turn off led before sleep
-        fast_led::set_solid(1, {0, 10, 0}); // turn off led before sleep
-        delay(250);
+        esp_sleep_enable_ext1_wakeup_io(wakeup_mask, ESP_EXT1_WAKEUP_ANY_LOW);
+        esp_sleep_enable_timer_wakeup(1000 * ms);
         esp_deep_sleep_start();
     }
 

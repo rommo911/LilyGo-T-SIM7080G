@@ -5,6 +5,7 @@
 #include "rtc/rtc.hpp"
 #include "Preferences.h"
 #include "power/power.hpp"
+#include "sdcard/sdcard.h"
 bool timeIsSynced = false;
 bool wifiOn = false;
 uint32_t last_ota_time = 0;
@@ -62,11 +63,11 @@ void StartWifi()
 void StopWifi()
 {
   wifiOn = false;
-  delay(100);
+  delay(50);
   WiFi.disconnect(true);
-  delay(100);
+  delay(50);
   WiFi.mode(WIFI_OFF);
-  delay(100);
+  delay(50);
   if (WifiTaskHandle != NULL)
   {
     vTaskDelete(WifiTaskHandle);
@@ -158,8 +159,9 @@ void loopWifiStation(void *arg)
   mqttclient.disconnect();
   ArduinoOTA.end();
   fs::GetmyWebServer().stop();
+  sdcard::shutdownSdcard();
   Serial.println("loopWifiAP thread exit");
-  delay(1000000);
+  vTaskDelete(NULL);
 }
 
 void loopWifiAP(void *arg)

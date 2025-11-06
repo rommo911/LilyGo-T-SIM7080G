@@ -795,24 +795,6 @@ uint8_t mpu6500_dmp_init(mpu6500_interface_t interface, mpu6500_address_t addr_p
     return 0;
 }
 
-/**
- * @brief      dmp example get pedometer counter
- * @param[out] *cnt pointer to a cnt buffer
- * @return     status code
- *             - 0 success
- *             - 1 get pedometer counter failed
- * @note       none
- */
-uint8_t mpu6500_dmp_get_pedometer_counter(uint32_t *cnt)
-{
-    /* get the pedometer counter */
-    if (mpu6500_dmp_get_pedometer_step_count(&gs_handle, cnt) != 0)
-    {
-        return 1;
-    }
-
-    return 0;
-}
 
 /**
  * @brief         dmp example read
