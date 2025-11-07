@@ -328,6 +328,8 @@ namespace fs
         "<option value=10>250 Hz</option>"
         "<option value=11>500 Hz</option>"
         "</select>"
+        "<p>Compare Mode:</p>"
+        "<input type=checkbox id=acc_comr /><label for=acc_comr>Enable Accelerometer Compare Mode</label>"
         "<br><br><input type=button class=btn value='Save WOM Settings' onclick='saveWOM()'>"
         "<script>"
         "function updateWOMVal(){ document.getElementById('val_wom').innerText = Number(document.getElementById('wom_thr').value).toFixed(1); }"
@@ -335,7 +337,8 @@ namespace fs
         " const payload = {"
         "   WOM_THR: parseFloat(document.getElementById('wom_thr').value),"
         "   WOM_LPF: parseInt(document.getElementById('wom_lpf').value,10),"
-        "   WOM_RATE: parseInt(document.getElementById('wom_rate').value,10)"
+        "   WOM_RATE: parseInt(document.getElementById('wom_rate').value,10),"
+        "   ACC_COMR: document.getElementById('acc_comr').checked"
         " };"
         " fetch('/setWomSettings',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})"
         "  .then(r=>{ if (r.ok) alert('WOM settings saved'); else alert('Failed to save WOM settings'); });"
@@ -345,13 +348,13 @@ namespace fs
         "   document.getElementById('wom_thr').value = d.WOM_THR;"
         "   document.getElementById('wom_lpf').value = d.WOM_LPF;"
         "   document.getElementById('wom_rate').value = d.WOM_RATE;"
+        "   document.getElementById('acc_comr').checked = d.ACC_COMR;"
         "   updateWOMVal();"
         " }).catch(()=>updateWOMVal());"
         " document.getElementById('wom_thr').addEventListener('input', updateWOMVal);"
         "});"
         "</script>" +
         style ;
-
         
     /* Timing Settings Page */
     static const String timingSettingsPage =

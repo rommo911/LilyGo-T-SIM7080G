@@ -57,6 +57,7 @@ namespace imu6500_dmp
   float WOM_DET_THRESH = 15.0f;
   mpu6500_accelerometer_low_pass_filter_t WOM_LPF = MPU6500_ACCELEROMETER_LOW_PASS_FILTER_1;
   mpu6500_low_power_accel_output_rate_t WOM_RATE = MPU6500_LOW_POWER_ACCEL_OUTPUT_RATE_3P91;
+  bool ACCEL_COMPARE = true;
   // Motion detection state
   // Baseline linear acceleration (gravity removed) in g's
   static baseline_t baseline;
@@ -182,7 +183,8 @@ namespace imu6500_dmp
                            MPU_InterruptCallback,
                            WOM_DET_THRESH,
                            WOM_LPF,
-                           WOM_RATE) != 0)
+                           WOM_RATE,
+                           ACCEL_COMPARE) != 0)
       {
         Serial.println("MPU6050 connection failed");
         // External row needle, 1400~3700mV // external supply from pmu to header
@@ -192,7 +194,8 @@ namespace imu6500_dmp
                              MPU_InterruptCallback,
                              WOM_DET_THRESH,
                              WOM_LPF,
-                             WOM_RATE) != 0)
+                             WOM_RATE,
+                             ACCEL_COMPARE) != 0)
         {
           Serial.println("MPU6050 connection failed again ");
           ImuMode = NA;
@@ -265,11 +268,23 @@ namespace imu6500_dmp
     MOTION_THRESHOLD_YAW = imuPref.getFloat("M_TH_YAW", MOTION_THRESHOLD_YAW);
     MOTION_THRESHOLD_PITCH = imuPref.getFloat("M_TH_PITCH", MOTION_THRESHOLD_PITCH);
     WOM_DET_THRESH = imuPref.getFloat("WOM_THR", WOM_DET_THRESH);
+    ACCEL_COMPARE = imuPref.getBool("ACC_COMR", ACCEL_COMPARE);
     WOM_LPF = (mpu6500_accelerometer_low_pass_filter_t)imuPref.getUInt("WOM_LPF", (uint32_t)WOM_LPF);
     WOM_RATE = (mpu6500_low_power_accel_output_rate_t)imuPref.getUInt("WOM_RATE", (uint32_t)WOM_RATE);
-    Serial.printf("WOM_DET_THRESH=%.2f ,WOM_LPF=%d ,  WOM_RATE= %d", WOM_DET_THRESH, WOM_LPF, WOM_RATE);
+    Serial.printf("WOM_DET_THRESH=%.2f ,WOM_LPF=%d ,  WOM_RATE= %d , ACCEL_COMPARE=%d", WOM_DET_THRESH, WOM_LPF, WOM_RATE, ACCEL_COMPARE);
     imuPref.end();
     return true;
+  }
+
+  bool SetAccelCompare(bool val)
+  {
+    bool ret = true;
+    Preferences imuPref;
+    imuPref.begin("imu");
+    imuPref.putFloat("ACC_COMR", val);
+    imuPref.end();
+    ACCEL_COMPARE = val;
+    return ret;
   }
 
   bool SetWakeOnMotionThresh(float val)
@@ -312,6 +327,11 @@ namespace imu6500_dmp
   {
     return WOM_RATE;
   }
+  bool GetAccelCompare()
+  {
+    return ACCEL_COMPARE;
+  }
+
 
   baseline_t getbaseline()
   {

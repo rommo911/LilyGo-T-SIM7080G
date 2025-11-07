@@ -60,6 +60,7 @@ namespace imu6500_dmp
   bool SetWakeOnMotionThresh(float val);
   bool set_wom_lpf(mpu6500_accelerometer_low_pass_filter_t lp);
   bool set_wom_acc_output_rate(mpu6500_low_power_accel_output_rate_t rate);
+  bool SetAccelCompare(bool val);
   // getters for current WOM configuration
   mpu6500_accelerometer_low_pass_filter_t get_wom_lpf();
   mpu6500_low_power_accel_output_rate_t get_wom_acc_output_rate();

@@ -354,11 +354,13 @@ namespace fs
     float wom = imuPref.getFloat("WOM_THR", 15.0f);
     uint32_t lpf = imuPref.getUInt("WOM_LPF", (uint32_t)imu6500_dmp::get_wom_lpf());
     uint32_t rate = imuPref.getUInt("WOM_RATE", (uint32_t)imu6500_dmp::get_wom_acc_output_rate());
+    bool acc_compare = imuPref.getBool("ACC_COMR", false);
     imuPref.end();
 
     String json = "{";
     json += "\"WOM_THR\":" + String(wom, 2) + ",";
     json += "\"WOM_LPF\":" + String(lpf) + ",";
+    json += "\"ACC_COMR\":" + String(acc_compare) + ",";
     json += "\"WOM_RATE\":" + String(rate);
     json += "}";
 
@@ -399,8 +401,13 @@ namespace fs
       if (doc["WOM_RATE"].is<uint8_t>())
       {
         uint8_t v = doc["WOM_RATE"];
-        if (MPU6500_LOW_POWER_ACCEL_OUTPUT_RATE_0P24 >= 0 && v <= MPU6500_LOW_POWER_ACCEL_OUTPUT_RATE_500)
+        if (v >= MPU6500_LOW_POWER_ACCEL_OUTPUT_RATE_0P24 && v <= MPU6500_LOW_POWER_ACCEL_OUTPUT_RATE_500)
           imu6500_dmp::set_wom_acc_output_rate((mpu6500_low_power_accel_output_rate_t)v);
+      }
+      if (doc["ACC_COMR"].is<bool>())
+      {
+        bool v = doc["ACC_COMR"];
+        imu6500_dmp::SetAccelCompare(v);
       }
       imu6500_dmp::restart(imu6500_dmp::WOM);
 

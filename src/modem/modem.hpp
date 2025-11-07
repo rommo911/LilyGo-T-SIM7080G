@@ -2,6 +2,8 @@
 #pragma once
 
 #include <TinyGsmClient.h>
+#include <FS.h>
+
 namespace modem
 {
     class GPS_INFO
@@ -30,11 +32,17 @@ namespace modem
     bool SetGPRS(bool enable);
     bool shutdownModem();
     bool setRF(bool enable);
+    bool sendFileToModem(File file, const char *destinationfilename = NULL);
 
     extern TinyGsm modem7080g;
     extern TinyGsmClient client;
     // extern TinyGsmClientSecure secureClient;
     // void loop_ppp();
     // void setup_ppp();
+
+    String sendHttpGET(const char *url);
+    String sendHttpsGET(const char *url);
+    String SendhttpPOST(const char *url, const char *data);
+    String SendHttpsPOST(const char *url, const char *data);
 
 }

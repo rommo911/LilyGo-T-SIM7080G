@@ -129,7 +129,8 @@ extern "C"
                              void (*receive_callback)(uint8_t type),
                              float sensitivity,
                              mpu6500_accelerometer_low_pass_filter_t acclpf,
-                             mpu6500_low_power_accel_output_rate_t acc_lp_rate);
+                             mpu6500_low_power_accel_output_rate_t acc_lp_rate,
+                             bool accel_compare);
     /**
      * @brief  dmp example deinit
      * @return status code

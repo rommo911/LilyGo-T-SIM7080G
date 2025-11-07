@@ -810,7 +810,8 @@ uint8_t mpu6500_wom_init(mpu6500_interface_t interface, mpu6500_address_t addr_p
                          void (*receive_callback)(uint8_t type),
                          float sensitivity,
                          mpu6500_accelerometer_low_pass_filter_t acclpf,
-                         mpu6500_low_power_accel_output_rate_t acc_lp_rate)
+                         mpu6500_low_power_accel_output_rate_t acc_lp_rate,
+                         bool accel_compare)
 {
     uint8_t res;
     uint8_t reg;
@@ -1033,7 +1034,7 @@ uint8_t mpu6500_wom_init(mpu6500_interface_t interface, mpu6500_address_t addr_p
         return 1;
     }
 
-    res = mpu6500_set_accel_compare_with_previous_sample(&gs_handle, MPU6500_BOOL_TRUE);
+    res = mpu6500_set_accel_compare_with_previous_sample(&gs_handle, accel_compare ? MPU6500_BOOL_TRUE : MPU6500_BOOL_FALSE);
     if (res != 0)
     {
         mpu6500_interface_debug_print("mpu6500: set accel compare with previous sample failed.\n");
