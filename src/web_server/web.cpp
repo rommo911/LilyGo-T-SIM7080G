@@ -273,7 +273,6 @@ namespace fs
     float roll = imuPref.getFloat("M_TH_ROLL", 0.5f);
     float yaw = imuPref.getFloat("M_TH_YAW", 0.5f);
     float pitch = imuPref.getFloat("M_TH_PITCH", 0.5f);
-    float wom = imuPref.getFloat("WOM_THR", 15);
     imuPref.end();
 
     String jsonResponse = "{";
@@ -283,7 +282,6 @@ namespace fs
     jsonResponse += "\"M_TH_ROLL\":" + String(roll, 2) + ",";
     jsonResponse += "\"M_TH_YAW\":" + String(yaw, 2) + ",";
     jsonResponse += "\"M_TH_PITCH\":" + String(pitch, 2) + ",";
-    jsonResponse += "\"WOM_THR\":" + String(wom, 2);
     jsonResponse += "}";
 
     GetmyWebServer().send(200, "application/json", jsonResponse);
@@ -321,14 +319,93 @@ namespace fs
         imuPref.putFloat("M_TH_YAW", (float)doc["M_TH_YAW"]);
       if (doc["M_TH_PITCH"].is<float>())
         imuPref.putFloat("M_TH_PITCH", (float)doc["M_TH_PITCH"]);
-      if (doc["WOM_THR"].is<float>())
-        imuPref.putFloat("WOM_THR", (float)doc["WOM_THR"]);
 
-      // update live IMU wake-on-motion threshold
+      // preferences saved; live WOM threshold update is handled by the WOM settings page
       imuPref.end();
-      imu6500_dmp::SetWakeOnMotionThresh();
       Serial.println("IMU thresholds saved to NVS");
       GetmyWebServer().send(200, "text/html", generateSuccessPage("IMU thresholds saved successfully!"));
+    }
+    else
+    {
+      GetmyWebServer().send(400, "text/html", generateSuccessPage("No data received"));
+    }
+  }
+
+  static void handleWomSettings()
+  {
+    if (!GetmyWebServer().authenticate_internal())
+    {
+      Serial.println("Authentication failed, redirecting to login page.");
+      return GetmyWebServer().requestAuthentication();
+    }
+    GetmyWebServer().sendHeader("Connection", "close");
+    GetmyWebServer().send(200, "text/html", womSettingsPage);
+  }
+
+  static void handleGetWomSettings()
+  {
+    if (!GetmyWebServer().authenticate_internal())
+    {
+      Serial.println("Authentication failed, redirecting to login page.");
+      return GetmyWebServer().requestAuthentication();
+    }
+    Preferences imuPref;
+    imuPref.begin("imu", true);
+    float wom = imuPref.getFloat("WOM_THR", 15.0f);
+    uint32_t lpf = imuPref.getUInt("WOM_LPF", (uint32_t)imu6500_dmp::get_wom_lpf());
+    uint32_t rate = imuPref.getUInt("WOM_RATE", (uint32_t)imu6500_dmp::get_wom_acc_output_rate());
+    imuPref.end();
+
+    String json = "{";
+    json += "\"WOM_THR\":" + String(wom, 2) + ",";
+    json += "\"WOM_LPF\":" + String(lpf) + ",";
+    json += "\"WOM_RATE\":" + String(rate);
+    json += "}";
+
+    GetmyWebServer().send(200, "application/json", json);
+  }
+
+  static void handleSetWomSettings()
+  {
+    if (!GetmyWebServer().authenticate_internal())
+    {
+      Serial.println("Authentication failed, redirecting to login page.");
+      return GetmyWebServer().requestAuthentication();
+    }
+    if (GetmyWebServer().hasArg("plain"))
+    {
+      String body = GetmyWebServer().arg("plain");
+      JsonDocument doc;
+      DeserializationError error = deserializeJson(doc, body);
+      if (error)
+      {
+        GetmyWebServer().send(400, "text/html", generateSuccessPage("Invalid JSON"));
+        return;
+      }
+
+      if (doc["WOM_THR"].is<float>())
+      // Update threshold live
+      {
+        imu6500_dmp::SetWakeOnMotionThresh((float)doc["WOM_THR"]);
+      }
+
+      // LPF and RATE updates: call imu functions which also persist
+      if (doc["WOM_LPF"].is<uint8_t>())
+      {
+        uint8_t v = doc["WOM_LPF"];
+        if (v >= MPU6500_ACCELEROMETER_LOW_PASS_FILTER_0 && v <= MPU6500_ACCELEROMETER_LOW_PASS_FILTER_7)
+          imu6500_dmp::set_wom_lpf((mpu6500_accelerometer_low_pass_filter_t)v);
+      }
+      if (doc["WOM_RATE"].is<uint8_t>())
+      {
+        uint8_t v = doc["WOM_RATE"];
+        if (MPU6500_LOW_POWER_ACCEL_OUTPUT_RATE_0P24 >= 0 && v <= MPU6500_LOW_POWER_ACCEL_OUTPUT_RATE_500)
+          imu6500_dmp::set_wom_acc_output_rate((mpu6500_low_power_accel_output_rate_t)v);
+      }
+      imu6500_dmp::restart(imu6500_dmp::WOM);
+
+      Serial.println("WOM settings saved to NVS");
+      GetmyWebServer().send(200, "text/html", generateSuccessPage("WOM settings saved successfully!"));
     }
     else
     {
@@ -594,6 +671,10 @@ namespace fs
     myServer.on("/imuThresholds", HTTP_GET, handleImuThresholds);
     myServer.on("/getImuThresholds", HTTP_GET, handleGetImuThresholds);
     myServer.on("/setImuThresholds", HTTP_POST, handleSetImuThresholds);
+    /* WOM Settings Pages */
+    myServer.on("/womSettings", HTTP_GET, handleWomSettings);
+    myServer.on("/getWomSettings", HTTP_GET, handleGetWomSettings);
+    myServer.on("/setWomSettings", HTTP_POST, handleSetWomSettings);
     /* WiFi Settings Pages */
     myServer.on("/wifiSettings", HTTP_GET, handleWifiSettings);
     myServer.on("/getWifiSettings", HTTP_GET, handleGetWifiSettings);

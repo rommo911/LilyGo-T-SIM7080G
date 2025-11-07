@@ -68,11 +68,8 @@ void StopWifi()
   delay(50);
   WiFi.mode(WIFI_OFF);
   delay(50);
-  if (WifiTaskHandle != NULL)
-  {
-    vTaskDelete(WifiTaskHandle);
-    WifiTaskHandle = NULL;
-  }
+  // vTaskDelete(WifiTaskHandle);
+  WifiTaskHandle = NULL;
   setCpuFrequencyMhz(80);
 }
 
@@ -127,22 +124,22 @@ void loopWifiStation(void *arg)
   uint8_t mqttReconnectCounter = 0;
   while (wifiOn == true)
   {
+    delay(10);
     if (WiFi.status() != WL_CONNECTED)
     {
       delay(250);
       continue;
     }
+    mqttReconnectCounter = 0;
     while (!mqttclient.connected() && mqttReconnectCounter++ < 3)
     {
-      mqttLogger.println("Attempting MQTT connection...\n");
+      Serial.println("Attempting MQTT connection...");
       // Attempt to connect
       if (mqttclient.connect("ESP32Tsim7080Logger", mqtt_user.c_str(), mqtt_pass.c_str()))
       {
         // as we have a connection here, this will be the first message published to the mqtt server
-        mqttLogger.println("connected.");
+        mqttLogger.println("connected");
         mqttclient.subscribe(mqtt_cmd_topic.c_str(), 1);
-        mqttReconnectCounter = 0;
-        mqttLogger.println("MQTT subscription complete ");
       }
       else
       {
@@ -151,7 +148,6 @@ void loopWifiStation(void *arg)
         delay(500);
       }
     }
-    mqttReconnectCounter = 0;
     mqttclient.loop();
     ArduinoOTA.handle();
     fs::GetmyWebServer().run();
@@ -160,7 +156,8 @@ void loopWifiStation(void *arg)
   ArduinoOTA.end();
   fs::GetmyWebServer().stop();
   sdcard::shutdownSdcard();
-  Serial.println("loopWifiAP thread exit");
+  Serial.println("loopWifiStation thread exit");
+  WifiTaskHandle = NULL;
   vTaskDelete(NULL);
 }
 
@@ -175,7 +172,8 @@ void loopWifiAP(void *arg)
   ArduinoOTA.end();
   fs::GetmyWebServer().stop();
   Serial.println("loopWifiAP thread exit");
-  delay(1000000);
+  WifiTaskHandle = NULL;
+  vTaskDelete(NULL);
 }
 
 void setUpWifiOTA(void *arg)

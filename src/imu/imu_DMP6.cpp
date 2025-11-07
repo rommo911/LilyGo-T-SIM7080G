@@ -338,7 +338,7 @@ namespace imu6050_dmp
   }
   // Exposed function to report motion. Returns true once if motion detected since last call.
 
-  MotionDtect_t imu_get_moved()
+  MotionDtect_t getMotion()
   { // Atomically consume the flag
     xSemaphoreTake(imuSemaphore, pdMS_TO_TICKS(10));
     MotionDtect_t str = globalMotion;

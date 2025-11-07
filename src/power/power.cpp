@@ -276,7 +276,7 @@ namespace power
             }
             if (PMU.isBatteryConnect())
             {
-                if ((millis() - lifSignTimeout) > lifesign)
+                if (((millis() - lifSignTimeout) > lifesign) || (event & 0b01))
                 {
                     mqttLogger.printf("CarLog/batt", " %d level:%d ,vol %d \n", PMU.isCharging() ? 1 : 0, PMU.getBatteryPercent(), PMU.getBattVoltage());
                     lifesign = millis();
@@ -400,7 +400,7 @@ namespace power
     {
         return VbusInsertTimestamp;
     }
-    
+
     bool isBattCharging()
     {
         return isCharging;
@@ -430,7 +430,7 @@ namespace power
         }
         return false;
     }
-    
+
     void DeepSleepWith_IMU_PMU_Wake()
     {
         // Configure wakeup source: IMU interrupt pin
@@ -483,7 +483,7 @@ namespace power
         esp_deep_sleep_start();
     }
 
-        void DeepSleepWith_Timer_Wake(uint32_t ms)
+    void DeepSleepWith_Timer_Wake(uint32_t ms)
     {
         mqttLogger.println("Entering deep sleep mode with timer PMU wakeup");
         // Configure wakeup source: IMU interrupt pin

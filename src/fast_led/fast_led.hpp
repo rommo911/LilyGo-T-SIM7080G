@@ -36,7 +36,7 @@ namespace fast_led
                      CRGB tocolor = CRGB::Black,
                      uint16_t on_time_ms = 350,
                      uint16_t off_time_ms = 350,
-                     int32_t timeout_s = -1);
+                     uint32_t timeout_s = 0);
 
     // Start a repeating fade cycle between `color` and `color_to`.
     // The full cycle (color -> color_to -> color) lasts `fade_cycle_duration_ms` milliseconds.

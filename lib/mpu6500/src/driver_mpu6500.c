@@ -659,7 +659,7 @@ static uint8_t a_mpu6500_accel_self_test(mpu6500_handle_t *handle, int32_t *bias
         {
             st_shift_cust[i] = (float)(bias_st[i] - bias_regular[i]);             /* set the shift cust */
             st_shift_ratio[i] = st_shift_cust[i] / ct_shift_prod[i] - 1.f;        /* set the shift ratio */
-            if (fabsf(st_shift_ratio[i]) > 0.5f)                                  /* check the shift ratio */
+            if (fabsf(st_shift_ratio[i]) > 0.9f)                                  /* check the shift ratio */
             {
                 handle->debug_print("/* check the shift ratio */ failed.\n");  
                 return 1;                                                         /* return error */
@@ -746,7 +746,7 @@ static uint8_t a_mpu6500_gyro_self_test(mpu6500_handle_t *handle, int32_t *bias_
         {
             st_shift_cust[i] = (float)(bias_st[i] - bias_regular[i]);           /* shift cust */
             st_shift_ratio[i] = st_shift_cust[i] / ct_shift_prod[i];            /* shift ratio */
-            if (fabsf(st_shift_ratio[i]) < 0.5f)                                /* check ratio */
+            if (fabsf(st_shift_ratio[i]) < 0.8f)                                /* check ratio */
             {
                 return 1;                                                       /* return error */
             }

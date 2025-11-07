@@ -59,7 +59,7 @@ extern "C"
 #define MPU6500_DMP_DEFAULT_LOW_PASS_FILTER MPU6500_ACCELEROMETER_LOW_PASS_FILTER_3               /**< low pass filter 3 */
 #define MPU6500_DMP_DEFAULT_CYCLE_WAKE_UP MPU6500_BOOL_FALSE                                      /**< disable cycle wake up */
 #define MPU6500_DMP_DEFAULT_CYCLE_WAKE_UP_LOW_PWER MPU6500_BOOL_FALSE                             /**< disable cycle wake up */
-#define MPU6500_DMP_DEFAULT_LOW_POWER_ACCEL_OUTPUT_RATE MPU6500_LOW_POWER_ACCEL_OUTPUT_RATE_62P50 /**< 62.5Hz */
+#define MPU6500_DMP_DEFAULT_LOW_POWER_ACCEL_OUTPUT_RATE MPU6500_LOW_POWER_ACCEL_OUTPUT_RATE_3P91  /**< 3.91Hz */
 #define MPU6500_DMP_DEFAULT_INTERRUPT_PIN_LEVEL MPU6500_PIN_LEVEL_LOW                             /**< low level */
 #define MPU6500_DMP_DEFAULT_INTERRUPT_PIN_TYPE MPU6500_PIN_TYPE_OPEN_DRAIN                        /**< push pull */
 #define MPU6500_DMP_DEFAULT_INTERRUPT_MOTION MPU6500_BOOL_TRUE                                    /**< enable motion */
@@ -125,6 +125,11 @@ extern "C"
     uint8_t mpu6500_dmp_init(mpu6500_interface_t interface, mpu6500_address_t addr_pin,
                              void (*receive_callback)(uint8_t type), float sensitivity, bool lowPower);
 
+    uint8_t mpu6500_wom_init(mpu6500_interface_t interface, mpu6500_address_t addr_pin,
+                             void (*receive_callback)(uint8_t type),
+                             float sensitivity,
+                             mpu6500_accelerometer_low_pass_filter_t acclpf,
+                             mpu6500_low_power_accel_output_rate_t acc_lp_rate);
     /**
      * @brief  dmp example deinit
      * @return status code
@@ -162,6 +167,7 @@ extern "C"
     void mpu6500_dmp_resetFIFO();
 
     uint8_t mpu6500_set_Motion_thresh(float thresh);
+    mpu6500_handle_t *mpu6500_get_handle();
 
     /**
      * @}

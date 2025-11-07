@@ -191,7 +191,7 @@ namespace fast_led
                      CRGB tocolor,
                      uint16_t on_time_ms,
                      uint16_t off_time_ms,
-                     int32_t timeout_s)
+                     uint32_t timeout_ms)
     {
         if (!valid_index(index))
             return;
@@ -207,7 +207,7 @@ namespace fast_led
         newstate.last_toggle = 0;
         newstate.blink_on = false; // worker will switch on first tick
         newstate.active = true;
-        newstate.timeout_ms = (timeout_s > 0) ? (timeout_s * 1000) : -1;
+        newstate.timeout_ms = (timeout_ms > 50) ? (timeout_ms) : -1;
         auto &s = states[index];
         s = newstate;
     }
