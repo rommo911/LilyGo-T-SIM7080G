@@ -271,7 +271,7 @@ namespace imu6500_dmp
     ACCEL_COMPARE = imuPref.getBool("ACC_COMR", ACCEL_COMPARE);
     WOM_LPF = (mpu6500_accelerometer_low_pass_filter_t)imuPref.getUInt("WOM_LPF", (uint32_t)WOM_LPF);
     WOM_RATE = (mpu6500_low_power_accel_output_rate_t)imuPref.getUInt("WOM_RATE", (uint32_t)WOM_RATE);
-    Serial.printf("WOM_DET_THRESH=%.2f ,WOM_LPF=%d ,  WOM_RATE= %d , ACCEL_COMPARE=%d", WOM_DET_THRESH, WOM_LPF, WOM_RATE, ACCEL_COMPARE);
+    Serial.printf("WOM_DET_THRESH=%.2f ,WOM_LPF=%d ,  WOM_RATE= %d , ACCEL_COMPARE=%d \n", WOM_DET_THRESH, WOM_LPF, WOM_RATE, ACCEL_COMPARE);
     imuPref.end();
     return true;
   }
@@ -281,7 +281,7 @@ namespace imu6500_dmp
     bool ret = true;
     Preferences imuPref;
     imuPref.begin("imu");
-    imuPref.putFloat("ACC_COMR", val);
+    imuPref.putBool("ACC_COMR", val);
     imuPref.end();
     ACCEL_COMPARE = val;
     return ret;

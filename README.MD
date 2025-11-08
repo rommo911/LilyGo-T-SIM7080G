@@ -30,11 +30,11 @@ The device is highly configurable via a web interface and is optimized for low-p
     wake up -> turn on cam , sleep for 10s --> wake up & turn off camera , return to secure mode ( motion detection ) 
 
 - **BLEUTOOTH / BLE:** 
-  - TODO:  broadcast BLE periodically ( maybe each 1m ? very low power needed)
-  - TODO: pair with phone via web server enable bleuttoh page and config
-  - TODO: upon connecting to phone :
-          sync time if possible
-          while Vbus ( car running ) -> send logs from files stored in file system ? or notifications ? 
+  - TODO: broadcast BLE periodically ( maybe each 1m ? very low power needed) ( got sleep with time & flag that we are waking up for BLE ? or other approach)
+  - TODO: pair with phone via web server to enable bleutooh page and its config ( start pairing process , removed paried device, reset , other config)
+  - TODO: when car started -> start bleutooth and try connect to phone, upon connecting to phone :
+          sync time if possible ? develop android app ? 
+          when Vbus ( car running ) & phone connected and ready to receive file -> send logs from files stored in file system ? or notifications maybe ? 
 
 - **GPS Tracking:**
   - Onboard GPS functionality provided by the SIM7080G modem.

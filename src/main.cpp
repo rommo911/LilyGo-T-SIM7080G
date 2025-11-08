@@ -110,23 +110,29 @@ void setup()
         {
             mqttLogger.println("wake FROM MOTION");
             fast_led::start_blink(0, {0, 0, 100}, CRGB::Black, 200, 200, 2000);
-            delay(2200);
+            delay(1000);
+            if (power::isBatLowLevel())
+            {
+                fast_led::set_solid(0, {0, 5, 0});
+                fast_led::set_solid(1, {5, 0, 0});
+            }
+            else
+            {
+                fast_led::set_solid(0, {0, 20, 0});
+                fast_led::set_solid(1, {20, 0, 0});
+            }
             if (!power::isPowerVBUSOn() && (!imu6500_dmp::getMotion()))
             {
-
                 if (power::isBatLowLevel())
                 {
-                    fast_led::set_solid(0, {0, 5, 0});
-                    fast_led::set_solid(1, {5, 0, 0});
-                    power::DeepSleepWith_Timer_Wake(getNoMotionTimeout());
+                    power::DeepSleepWith_Timer_Wake(getNoMotionTimeout()); // dont keep waking up for new motion !
                 }
                 else
                 {
-                    fast_led::set_solid(0, {0, 20, 0});
-                    fast_led::set_solid(1, {20, 0, 0});
-                    power::DeepSleepWith_IMU_Timer_Wake(getNoMotionTimeout());
+                    power::DeepSleepWith_IMU_Timer_Wake(getNoMotionTimeout()); // wake up and reset timer if new motion is detected before expires
                 }
             }
+
             break;
         }
         case power::WakeUpReason::TIMER:
@@ -139,9 +145,9 @@ void setup()
                 motionCounter++;
                 turnOffCamera();
                 if (power::isBatLowLevel())
-                    fast_led::set_solid(0, {3, 0, 0}); // turn off led before sleep
+                    fast_led::set_solid(0, {2, 0, 0}); // turn off led before sleep
                 else
-                    fast_led::set_solid(0, {0, 0, 5}); // turn off led before sleep
+                    fast_led::set_solid(0, {0, 0, 3}); // turn off led before sleep
 
                 fast_led::stop_led(1); // turn off led before sleep
                 power::DeepSleepWith_IMU_PMU_Wake();
@@ -178,7 +184,7 @@ void loopPowerCheck()
     {
         simulatedLowPowerTrigger = false;
         mqttLogger.printf("Battery low level detected in main loop \n");
-        fast_led::set_solid(0, {5, 0, 0}); // turn off led before sleep
+        fast_led::set_solid(0, {2, 0, 0}); // turn off led before sleep
         fast_led::stop_led(1);             // turn off led before sleep
         delay(30);
         power::DeepSleepWith_IMU_PMU_Wake();
@@ -203,7 +209,7 @@ void loopImuMotion()
     {
         mqttLogger.println("starting secure mode");
         turnOffCamera();
-        fast_led::set_solid(0, {0, 0, 5}); // turn off led before sleep
+        fast_led::set_solid(0, {0, 0, 2}); // turn off led before sleep
         fast_led::stop_led(1);             // turn off led before sleep            modem::shutdownModem();
         power::DeepSleepWith_IMU_PMU_Wake();
     }
