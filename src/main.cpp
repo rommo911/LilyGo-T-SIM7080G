@@ -58,13 +58,13 @@ void setup()
     Serial.begin(115200);
     wu = power::Get_wake_reason();
 
+    power::setupPower();
     bool ret = false;
     // setCpuFrequencyMhz(80);
     WiFi.mode(WIFI_OFF);
     // Serial.setTxBufferSize(512);
-    power::setupPower();
     fast_led::fast_led_init();
-    fast_led::set_solid(0, {0, 0, 50});
+    fast_led::set_solid(0, {0, 0, 30});
     pinMode(CAM_PIN, OUTPUT);
     turnOnCamera();
     loadTimingPref();
@@ -121,7 +121,7 @@ void setup()
                 fast_led::set_solid(0, {0, 20, 0});
                 fast_led::set_solid(1, {20, 0, 0});
             }
-            if (!power::isPowerVBUSOn() && (!imu6500_dmp::getMotion()))
+            if (!power::isPowerVBUSOn())
             {
                 if (power::isBatLowLevel())
                 {
@@ -162,7 +162,15 @@ void setup()
         }
         }
     }
-    CheckMotionCount();
+    if (power::isPowerVBUSOn())
+    {
+        if (sdcard::checkForupdatefromSD())
+        {
+            Serial.println("update done restarting");
+            delay(100);
+            ESP.restart();
+        }
+    }
 }
 
 void loopPowerCheck()
@@ -171,13 +179,16 @@ void loopPowerCheck()
     {
         const uint8_t percent = power::getPMU().getBatteryPercent();
         fast_led::set_solid(1, batteryColor(percent));
-        if (!simulatedLowPowerTrigger && !simulatedCriticalLowPowerTrigger)
-            return;
+        CheckMotionCount();
+        return;
     }
-    if (power::isBatCriticalLevel() || simulatedCriticalLowPowerTrigger)
+    if (power::isBatCriticalLevel())
     {
         mqttLogger.printf("Battery critical level detected in main loop \n");
-        delay(100);
+        fast_led::start_blink(0, {20, 0, 0}, CRGB::Black, 75, 125, 500);
+        delay(500);
+        fast_led::stop_led(1);
+        fast_led::stop_led(0);
         power::getPMU().shutdown();
     }
     if (power::isBatLowLevel() || simulatedLowPowerTrigger)
